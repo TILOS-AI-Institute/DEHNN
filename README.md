@@ -2,6 +2,8 @@
 
 This is the github repository of The AIStats 2024 paper: "DE-HNN: An effective neural model for Circuit Netlist representation" by Zhishang Luo, Truong Son Hy, Puoya Tabaghi, Donghyeon Koh, Michael Defferrard, Elahe Rezaei, Ryan Carey, Rhett Davis, Rajeev Jain, Yusu Wang.
 
+Link to the paper (arxiv preprint): [link](https://arxiv.org/abs/2404.00477)
+
 ## Environment Setup
 
 The dependencies are recorded in requirements.txt. You can install the dependencies using pip:
