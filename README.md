@@ -1,8 +1,7 @@
 # DE-HNN: An effective neural model for Circuit Netlist representation
 
-This is the github repository of The AIStats 2024 paper: "DE-HNN: An effective neural model for Circuit Netlist representation" by Zhishang Luo, Truong Son Hy, Puoya Tabaghi, Donghyeon Koh, Michael Defferrard, Elahe Rezaei, Ryan Carey, Rhett Davis, Rajeev Jain, Yusu Wang.
-
-Link to the paper (arxiv preprint): [link](https://arxiv.org/abs/2404.00477)
+This is the github repository of The AIStats 2024 paper: 
+"Luo, Z., Hy, T. S., Tabaghi, P., Koh, D., Defferrard, M., Rezaei, E., Carey, R., Davis, R., Jain, R., and Wang, Y. (2024). De-hnn: An effective neural model for circuit netlist representation." [arxiv](https://arxiv.org/abs/2404.00477)
 
 ## Environment Setup
 
