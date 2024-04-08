@@ -13,6 +13,8 @@ pip install -r requirements.txt
 
 ## How to Download Netlist Data
 
+A seperate README for Netlist Data is available here: [Data README](README_DATA.md)
+
 Raw data is available at [link](https://zenodo.org/records/10795280?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6Ijk5NjM2MzZiLTg0ZmUtNDI2My04OTQ3LTljMjA5ZjA3N2Y1OSIsImRhdGEiOnt9LCJyYW5kb20iOiJlYzFmMGJlZTU3MzE1OWMzOTU2MWZkYTE3MzY5ZjRjOCJ9.WifQFExjW1CAW0ahf3e5Qr0OV9c2cw9_RUbOXUsvRbnKlkApNZwVCL_VPRJvAve0MJDC0DDOSx_RLiTvBimr0w). 
 
 After downloading the raw data, please extract and put the raw data directory to "/de_hnn/data/" directory.
