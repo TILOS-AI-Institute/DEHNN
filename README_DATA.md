@@ -50,13 +50,13 @@ Depending on the models is a Graph Neural Network or a (directed) Hypergraph Neu
 
 Features:
 - Cell/Node Features:
-* Type (int): Master library cell ID (array index).
-* Orient (int): Orientation of a cell.
-* Width, Height (float): Width and height of a cell.
-* Cell Degree (int): The degree of a cell.
-* Degree Distribution (list[int]): Degree distribution of a local neighborhood. 
-* Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
-* PD (list[float]): Persistent diagram features.
+	* Type (int): Master library cell ID (array index).
+	* Orient (int): Orientation of a cell.
+	* Width, Height (float): Width and height of a cell.
+	* Cell Degree (int): The degree of a cell.
+	* Degree Distribution (list[int]): Degree distribution of a local neighborhood. 
+	* Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
+	* PD (list[float]): Persistent diagram features.
 - Net/(Hyper)edge Feature:
 * Net Degree (int): The degree of a net. 
 
