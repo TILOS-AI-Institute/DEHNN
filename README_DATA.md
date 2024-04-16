@@ -2,12 +2,10 @@
 
 ### Raw Data:
 Digital Integrated Circuit Graph Data
-by Donghyeon Koh and W. Rhett Davis, NC State University
- 
-(**You can skip this section if you only need the Processed Data (pyg datasets)**)
 SKY130-HS RocketTile Data
-2024-01-15  by Donghyeon Koh and W. Rhett Davis, NC State University
-
+2024-01-15  by Donghyeon Koh and W. Rhett Davis, NC State University //
+ 
+(**You can skip this section if you only need the Processed Data (pyg datasets)**) //
 The netlist dataset consists of 12 of the Superblue circuits from (Viswanathan et al., 2011, 2012), including Superblue1,2,3,5,6,7,9,11,14,16,18 and 19. The size of these netlists range from 400K to 1.3M nodes, with similar number of nets. More details of designs can be found in paper and appendix.
 These netlist files were generated with physical design of the Rocket-Chip generator [link](https://github.com/chipsalliance/rocket-chip) for the Skywater 130nm process and High-Speed standard-cell library (sky130hs).  The default configuration of the Rocket-Chip was used, and physical design was performed for the RocketTile module. Dummy memories were generated with a similar interface
 to the OpenRAM single-port SRAM.
