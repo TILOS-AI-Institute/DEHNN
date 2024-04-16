@@ -50,20 +50,20 @@ Depending on the models is a Graph Neural Network or a (directed) Hypergraph Neu
 
 Features:
 - Cell/Node Features:
-        * Type (int): Master library cell ID (array index).
-        * Orient (int): Orientation of a cell.
-        * Width, Height (float): Width and height of a cell.
-        * Cell Degree (int): The degree of a cell.
-        * Degree Distribution (list[int]): Degree distribution of a local neighborhood. 
-        * Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
-        * PD (list[float]): Persistent diagram features.
+* Type (int): Master library cell ID (array index).
+* Orient (int): Orientation of a cell.
+* Width, Height (float): Width and height of a cell.
+* Cell Degree (int): The degree of a cell.
+* Degree Distribution (list[int]): Degree distribution of a local neighborhood. 
+* Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
+* PD (list[float]): Persistent diagram features.
 - Net/(Hyper)edge Feature:
-        * Net Degree (int): The degree of a net. 
+* Net Degree (int): The degree of a net. 
 
 Targets:
-    - Net-based Wirelength Regression: Half-perimeter wirelength (HPWL) as a common estimate of wirelength. 
-    - Net-based Demand Regression: Demand of each net, congestion happens when demand exceeds capacity. 
-    - Cell-based Congestion Classification: Similar to (Yang et al., 2022) and (Wang et al., 2022), we classify the cell-based congestion values (computed as the ratio of cell demand/cell capacity) into (a) [0,0.9], not-congested ; and (b) [0.9, inf]; congested.
+- Net-based Wirelength Regression: Half-perimeter wirelength (HPWL) as a common estimate of wirelength. 
+- Net-based Demand Regression: Demand of each net, congestion happens when demand exceeds capacity. 
+- Cell-based Congestion Classification: Similar to (Yang et al., 2022) and (Wang et al., 2022), we classify the cell-based congestion values (computed as the ratio of cell demand/cell capacity) into (a) [0,0.9], not-congested ; and (b) [0.9, inf]; congested.
 
 In folder 
 "2023-03-06_data/" 
@@ -83,23 +83,23 @@ Below is a file description for some files/folders used for only for experiments
     - split/: The folder contains all splits to do cross validation we used to do **single design** experiments. 
 
 Below is a file description for each design/netlist (there is only one netlist for each design):
-    - {idx}.bipartite.pkl: The connectivity information between cells and nets of the bipartite graph representation of a netlist. 
-    - {idx}.degree.pkl: The degrees information of cells and nets.
-    - {idx}.eigen.10.pkl: The top-10 eigenvectors and eigenvalues.
-    - {idx}.global_information.pkl: The global information of a netlist. 
-    - {idx}.metis_part_dict.pkl: The Metis (Karypis and Kumar, 1998) [link](https://github.com/KarypisLab/METIS) based partition information. 
-    - {idx}.net_demand_capacity.pkl: The demands and capacity information of each net. 
-    - {idx}.net_features.pkl: The features of each net.
-    - {idx}.net_hpwl.pkl: The Half-perimeter wirelength (HPWL) for each net. 
-    - {idx}.nn_conn.pkl: The connectivity file prepared for NetlistGNN (Yang et al., 2022). [link](https://github.com/PKUterran/NetlistGNN) 
-    - {idx}.node_features.pkl: The features of each node. 
-    - {idx}.targets.pkl: The processed targets or labels of each cell/net to predict.
-    - node_neighbors/{idx}.node_neighbor_features.pkl: The neighborhood features for each cell/node. 
+- {idx}.bipartite.pkl: The connectivity information between cells and nets of the bipartite graph representation of a netlist. 
+- {idx}.degree.pkl: The degrees information of cells and nets.
+- {idx}.eigen.10.pkl: The top-10 eigenvectors and eigenvalues.
+- {idx}.global_information.pkl: The global information of a netlist. 
+- {idx}.metis_part_dict.pkl: The Metis (Karypis and Kumar, 1998) [link](https://github.com/KarypisLab/METIS) based partition information. 
+- {idx}.net_demand_capacity.pkl: The demands and capacity information of each net. 
+- {idx}.net_features.pkl: The features of each net.
+- {idx}.net_hpwl.pkl: The Half-perimeter wirelength (HPWL) for each net. 
+- {idx}.nn_conn.pkl: The connectivity file prepared for NetlistGNN (Yang et al., 2022). [link](https://github.com/PKUterran/NetlistGNN) 
+- {idx}.node_features.pkl: The features of each node. 
+- {idx}.targets.pkl: The processed targets or labels of each cell/net to predict.
+- node_neighbors/{idx}.node_neighbor_features.pkl: The neighborhood features for each cell/node. 
     
 Notice that there are another several files, which are not related to the main text in our paper, but is used in our appendix:
-    - {idx}.pl_fix_part_dict.pkl: The fixed-size bounding box based partition information (when placement info available).
-    - {idx}.pl_part_dict.pkl: The relative-size bounding box (the number of boxes is same for all netlist) based partition information (when placement info available).
-    - {idx}.star.pkl: The "star" graph representation where only cells and the connectivities between cells are included. Please refer to appendix for more details. 
-    - {idx}.star_part_dict: The Metis based partition, but on star graph representation of each netlist.              
-    
+- {idx}.pl_fix_part_dict.pkl: The fixed-size bounding box based partition information (when placement info available).
+- {idx}.pl_part_dict.pkl: The relative-size bounding box (the number of boxes is same for all netlist) based partition information (when placement info available).
+- {idx}.star.pkl: The "star" graph representation where only cells and the connectivities between cells are included. Please refer to appendix for more details. 
+- {idx}.star_part_dict: The Metis based partition, but on star graph representation of each netlist.              
+
 
