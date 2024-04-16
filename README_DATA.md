@@ -14,15 +14,16 @@ These netlist files were generated with physical design of the Rocket-Chip gener
 to the OpenRAM single-port SRAM.
 The database-units-to-user-units (DBUtoUU) conversion factor for this dataset is 1000.  Integer dimensions should be divided by this factor to get real dimensions in microns.
 The file settings.csv contains the following settings for each variant:
-CORE_UTILIZATION   - initial ratio of cell area to core area 
-MAX_ROUTING_LAYER  - maximum allowed layer for routing (complete list
+
+- CORE_UTILIZATION   - initial ratio of cell area to core area 
+- MAX_ROUTING_LAYER  - maximum allowed layer for routing (complete list
                      of layers is in counter_congestion.npz 'layerList')
-CLK_PER            - clock period constraint (i.e. target) in units of ns
-MAX_CLK_TRANS      - maximum allowed transition time for a clock node,
+- CLK_PER            - clock period constraint (i.e. target) in units of ns
+- MAX_CLK_TRANS      - maximum allowed transition time for a clock node,
                      in units of ns.  These are currently set at 500 ns
 					 for all variants, which is effectively unconstrained.
-CLK_UNCERTAINTY    - clock uncertainty (currently 0.2 ns for all variants)
-FLOW_STAGE         - Design flow stage at which the data was generated
+- CLK_UNCERTAINTY    - clock uncertainty (currently 0.2 ns for all variants)
+- FLOW_STAGE         - Design flow stage at which the data was generated
 
 There are 6 other settings relating to the layout of the power distribution network, but these are fixed for all variants and can be ignored for now: HSTRAP_LAYER, HSTRAP_WIDTH, HSTRAP_PITCH, VSTRAP_LAYER, VSTRAP_WIDTH, and VSTRAP_PITCH
 
