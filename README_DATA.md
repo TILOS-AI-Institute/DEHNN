@@ -49,7 +49,7 @@ We used PyTorch-geometric (pyg) (Fey and Lenssen, 2019) to construct the dataset
 Depending on the models is a Graph Neural Network or a (directed) Hypergraph Neural Network, each netlist circuit from the Raw Data will be represented as a bipartite-graph or (directed) hypergraph using pyg. 
 
 Features:
-    - Cell/Node Features:
+- Cell/Node Features:
         * Type (int): Master library cell ID (array index).
         * Orient (int): Orientation of a cell.
         * Width, Height (float): Width and height of a cell.
@@ -57,7 +57,7 @@ Features:
         * Degree Distribution (list[int]): Degree distribution of a local neighborhood. 
         * Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
         * PD (list[float]): Persistent diagram features.
-   - Net/(Hyper)edge Feature:
+- Net/(Hyper)edge Feature:
         * Net Degree (int): The degree of a net. 
 
 Targets:
