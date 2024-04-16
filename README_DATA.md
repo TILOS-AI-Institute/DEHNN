@@ -1,12 +1,8 @@
 ## README for netlist dataset we used in our paper. 
 
-### Background and Brief Introduction to Dataset. 
+### Raw Data:
 by Donghyeon Koh and W. Rhett Davis, NC State University
-[Slides Introduction to Data](DigIC-GraphData.pdf)
-
-Notice that not all the features are used as described in the slides. 
-
-### Raw Data: 
+ 
 (**You can skip this section if you only need the Processed Data (pyg datasets)**)
 Digital Integrated Circuit Graph Data
 
