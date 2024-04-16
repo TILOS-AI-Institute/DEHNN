@@ -58,7 +58,7 @@ Features:
 	* Laplacian Eigenvector (list[float]): Top-10 Laplacian Eigenvector. 
 	* PD (list[float]): Persistent diagram features.
 - Net/(Hyper)edge Feature:
-* Net Degree (int): The degree of a net. 
+	* Net Degree (int): The degree of a net. 
 
 Targets:
 - Net-based Wirelength Regression: Half-perimeter wirelength (HPWL) as a common estimate of wirelength. 
