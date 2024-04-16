@@ -1,9 +1,7 @@
 ## README for netlist dataset we used in our paper. 
 
 ### Raw Data:
-Digital Integrated Circuit Graph Data
-
-SKY130-HS RocketTile Data
+Digital Integrated Circuit Graph Data: SKY130-HS RocketTile Data
 
 2024-01-15  by Donghyeon Koh and W. Rhett Davis, NC State University 
  
