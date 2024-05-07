@@ -2,7 +2,7 @@
 
 This is the github repository of The AIStats 2024 paper:  
 "DE-HNN: An effective neural model for Circuit Netlist representation.
- Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), to appear, 2024." [arxiv](https://arxiv.org/abs/2404.00477)
+ Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), 2024." [arxiv](https://arxiv.org/abs/2404.00477)
 
 ## Environment Setup
 
