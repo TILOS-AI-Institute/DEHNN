@@ -1,0 +1,6 @@
+torch==1.13.1+cu116
+torch-cluster==1.6.0+pt113cu116
+torch-scatter==2.1.0+pt113cu116
+torch-sparse==0.6.16+pt113cu116
+torch-spline-conv==1.2.1+pt113cu116
+dgl==1.0.2+cu113
