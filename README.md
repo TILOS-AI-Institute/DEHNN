@@ -4,8 +4,9 @@ This is the github repository of The AIStats 2024 paper:
 "DE-HNN: An effective neural model for Circuit Netlist representation.
  Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), 2024." [arxiv](https://arxiv.org/abs/2404.00477)
 
-## Recent Updated:
+## Important: Recent Updated:
 A new version for UT Austin Data is updated at "de_hnn_tx/" 
+
 This new version is easier to use, more compatible, and require much less RAM.
 
 Please see detailed instruction in [New README](de_hnn_tx/README.md)
