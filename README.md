@@ -4,6 +4,14 @@ This is the github repository of The AIStats 2024 paper:
 "DE-HNN: An effective neural model for Circuit Netlist representation.
  Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), 2024." [arxiv](https://arxiv.org/abs/2404.00477)
 
+## Recent Updated:
+A new version that is easier, more compatible, and required much less RAM is updated. 
+
+For more details, please go to directory:
+```commandline
+de_hnn_tx
+```
+
 ## Environment Setup
 
 We built based on python 3.8.8, CUDA 11.6, Linux Centos 8. 
