@@ -5,12 +5,12 @@ This is the github repository of The AIStats 2024 paper:
  Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), 2024." [arxiv](https://arxiv.org/abs/2404.00477)
 
 ## Recent Updated:
-A new version that is easier, more compatible, and required much less RAM is updated. 
+A new version for UT Austin Data is updated at "de_hnn_tx/" 
+This new version is easier to use, more compatible, and require much less RAM.
 
-For more details, please go to directory:
-```commandline
-de_hnn_tx
-```
+Please see detailed instruction in [New README](de_hnn_tx/README.md)
+
+Following the environment setup is still strongly recommended. 
 
 ## Environment Setup
 
