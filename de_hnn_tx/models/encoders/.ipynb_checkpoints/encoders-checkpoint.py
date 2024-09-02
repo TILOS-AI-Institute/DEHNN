@@ -1,7 +1,3 @@
-"""
-SignNet https://arxiv.org/abs/2202.13013
-based on https://github.com/cptq/SignNet-BasisNet
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -267,3 +263,4 @@ class SignNetNodeEncoder(torch.nn.Module):
         if self.pass_as_var:
             batch.pe_SignNet = pos_enc
         return batch
+
