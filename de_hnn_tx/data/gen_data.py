@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 from tqdm import tqdm
 
-data_dir = "cross_design_data"
+data_dir = "cross_design_data_updated/"
 
 to_gen = sys.argv[1:]
 
@@ -22,25 +22,32 @@ print("to-gen list: " + ", ".join(to_gen))
 
 for design_fp in tqdm(os.listdir(data_dir)):
     print(f"processing {design_fp}")
+
     
-    with open(os.path.join(data_dir, design_fp, 'net2sink_nodes.pkl'), 'rb') as f:
-        net2sink = pickle.load(f)
-
-    with open(os.path.join(data_dir, design_fp, 'net2source_node.pkl'), 'rb') as f:
-        net2source = pickle.load(f)
-
-    with open(os.path.join(data_dir, design_fp, 'target_net_hpwl.pkl'), 'rb') as f:
-        net_hpwl = pickle.load(f)
+    try: 
+        if "eigen" in to_gen:
+            with open(os.path.join(data_dir, design_fp, 'net2sink_nodes.pkl'), 'rb') as f:
+                net2sink = pickle.load(f)
     
-    with open(os.path.join(data_dir, design_fp, 'target_node_congestion_level.pkl'), 'rb') as f:
-        node_congestion = pickle.load(f)
+            with open(os.path.join(data_dir, design_fp, 'net2source_node.pkl'), 'rb') as f:
+                net2source = pickle.load(f)
 
-    with open(os.path.join(data_dir, design_fp, 'node_loc_x.pkl'), 'rb') as f:
-        node_loc_x = pickle.load(f)
+        with open(os.path.join(data_dir, design_fp, 'target_net_hpwl.pkl'), 'rb') as f:
+            net_hpwl = pickle.load(f)
+        
+        with open(os.path.join(data_dir, design_fp, 'target_node_congestion_level.pkl'), 'rb') as f:
+            node_congestion = pickle.load(f)
+
+        with open(os.path.join(data_dir, design_fp, 'node_loc_x.pkl'), 'rb') as f:
+            node_loc_x = pickle.load(f)
+        
+        with open(os.path.join(data_dir, design_fp, 'node_loc_y.pkl'), 'rb') as f:
+            node_loc_y = pickle.load(f)
+
+    except:
+        print(f"read file failed for: {design_fp}")
+        continue
     
-    with open(os.path.join(data_dir, design_fp, 'node_loc_y.pkl'), 'rb') as f:
-        node_loc_y = pickle.load(f)
-
     if "eigen" in to_gen:
         print("generating lap-eigenvectors")
         edge_index = []
@@ -61,7 +68,7 @@ for design_fp in tqdm(os.listdir(data_dir)):
             *get_laplacian(edge_index, normalization="sym", num_nodes = num_instances)
         )
         
-        k = 10
+        k = 5
         evals, evects = eigsh(L, k = k, which='SM')
     
         eig_fp = os.path.join(data_dir, design_fp, 'eigen.' + str(k) + '.pkl')
@@ -103,8 +110,8 @@ for design_fp in tqdm(os.listdir(data_dir)):
         print("generating placement-based partitions")
         x_lst = node_loc_x - min(node_loc_x)
         y_lst = node_loc_y - min(node_loc_y)
-        unit_width = abs(max(x_lst) - min(x_lst))/100
-        unit_height = abs(max(y_lst) - min(y_lst))/100
+        unit_width = abs(max(x_lst) - min(x_lst))/50
+        unit_height = abs(max(y_lst) - min(y_lst))/50
         part_dict = {}
         phy_id_set = set()
         
@@ -113,7 +120,7 @@ for design_fp in tqdm(os.listdir(data_dir)):
             y = y_lst[idx]
             x = int(x//unit_width)
             y = int(y//unit_height)
-            part_id = x * 100 + y
+            part_id = x * 50 + y
             part_dict[idx] = part_id
             phy_id_set.add(part_id)
         
@@ -124,3 +131,18 @@ for design_fp in tqdm(os.listdir(data_dir)):
         pickle.dump(part_dict, f)
         f.close()
 
+    if "random" in to_gen:
+        print("generating random features")
+        num_instances = len(node_congestion)
+        num_nets = len(net_hpwl)
+        
+        node_ramdom_features = torch.rand(num_instances, 10)
+        net_random_features = torch.rand(num_nets, 10)
+        
+        random_fp = os.path.join(data_dir, design_fp, 'random' + '.pkl')
+        with open(random_fp, "wb") as f:
+            dictionary = {
+                'node_random': node_ramdom_features,
+                'net_random': net_random_features
+            }
+            pickle.dump(dictionary, f)
