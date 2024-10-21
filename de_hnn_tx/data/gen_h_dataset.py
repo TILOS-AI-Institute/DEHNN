@@ -17,6 +17,7 @@ from pyg_dataset import NetlistDataset
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
+
 data_dir = "cross_design_data_updated"
 load_indices = None
 pl = True
@@ -46,6 +47,12 @@ for design_fp in tqdm(all_files):
         net_hpwl = pickle.load(f)
     with open(os.path.join(data_dir, design_fp, 'target_node_congestion_level.pkl'), 'rb') as f:
         node_congestion = pickle.load(f)
+
+    if node_loc_x.shape[0] != 633162:
+        continue
+
+    if np.mean(node_congestion) == 0:
+        continue
 
     file_name = os.path.join(data_dir, design_fp, 'pl_part_dict.pkl')
     f = open(file_name, 'rb')
@@ -99,4 +106,4 @@ for design_fp in tqdm(all_files):
     h_data.num_instances = num_instances
     h_dataset.append(h_data)
 
-torch.save(new_dataset, f"../dataset.pt")
+torch.save(h_dataset, f"../147_dataset.pt")
