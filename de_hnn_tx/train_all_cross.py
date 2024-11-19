@@ -193,7 +193,7 @@ for epoch in range(1000):
         y_max_each = y_max_all[data_idx]
 
         for inner_data_idx in tqdm(range(len(data.variant_data_lst))):
-            pos_lst, edge_attr, node_congestion, net_hpwl, batch, num_vn = data.variant_data_lst[inner_data_idx]
+            pos_lst, edge_attr, target_node, target_net, batch, num_vn = data.variant_data_lst[inner_data_idx]
             optimizer.zero_grad()
             data['node'].x = torch.concat([data['node'].node_features, pos_lst + (torch.rand(1) * 10)], dim=1)
             data.batch = batch
@@ -207,7 +207,7 @@ for epoch in range(1000):
             #loss_node = criterion_node(node_representation.flatten(), target_node.to(device))
             loss_node = weighted_mse_loss(node_representation.flatten(), target_node.to(device), y_weight_each.to(device))
             loss_net = criterion_net(net_representation.flatten(), target_net.to(device))
-            loss = 100*loss_node + 0.001*loss_net
+            loss = loss_node + 0.001*loss_net
             loss.backward()
             optimizer.step()
             
