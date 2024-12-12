@@ -22,41 +22,58 @@ from torch_geometric.utils import (
 
 from torch_geometric.nn.conv import GATv2Conv, GCNConv, SimpleConv
 
-
 class HyperConvLayer(MessagePassing):
-    def __init__(self, net_out_channels, out_channels):
-        super().__init__(aggr='add')
+    def __init__(self, net_out_channels, out_channels, aggr='add'):
+        super().__init__(aggr=aggr)
 
-        self.phi = Seq(Linear(out_channels, out_channels),
+        self.phi = Seq(Linear(out_channels * 3, out_channels * 3),
                         ReLU(),
-                        Linear(out_channels, out_channels))
+                        Linear(out_channels * 3, out_channels))
 
         self.psi = Seq(Linear(net_out_channels, net_out_channels),
                         ReLU(),
                         Linear(net_out_channels, net_out_channels))
         
-        self.mlp = Seq(Linear(net_out_channels * 3, net_out_channels * 3),
+        self.mlp = Seq(Linear(net_out_channels * 2, net_out_channels * 2),
                         ReLU(),
-                        Linear(net_out_channels * 3, net_out_channels))
+                        Linear(net_out_channels * 2, net_out_channels))
 
         self.conv = SimpleConv()
-        self.node_batchnorm = nn.BatchNorm1d(out_channels)
-        self.hyperedge_batchnorm = nn.BatchNorm1d(net_out_channels)
-        self.back_conv = GATv2Conv(out_channels, out_channels, edge_dim=1)
+        self.forward_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False)
+        self.back_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False)
         
-    def forward(self, x, x_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net, edge_attr_sink_to_net): 
-        x = self.node_batchnorm(x)
-        x_net = self.hyperedge_batchnorm(x_net)
-        h = self.phi(x)
-        
-        h_net_source = self.conv((h, x_net), edge_index_source_to_net)
-        h_net_sink = self.propagate(edge_index_sink_to_net, x=(h, x_net), edge_weight=edge_weight_sink_to_net)
-        h_net_sink = self.psi(h_net_sink)
-        
-        h_net = self.mlp(torch.concat([x_net, h_net_source, h_net_sink], dim=1)) + x_net
-        h = self.conv((h_net, h), torch.flip(edge_index_source_to_net, dims=[0])) + self.back_conv((h_net, h), torch.flip(edge_index_source_to_net, dims=[0])) + self.back_conv((h_net, h), torch.flip(edge_index_sink_to_net, dims=[0]), edge_attr = edge_attr_sink_to_net) + x
-        
+    def forward(self, x, x_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net, edge_attr_sink_to_net):
+        h_net_source = self.conv((x, x_net), edge_index_source_to_net) + x_net
+        h_net_sink = self.psi(self.forward_conv((x, x_net), edge_index_sink_to_net, edge_attr = edge_attr_sink_to_net)) + x_net
+        h_net = self.mlp(torch.concat([h_net_source, h_net_sink], dim=1)) + x_net
+        h = self.phi(torch.concat([x, self.conv((h_net, x), torch.flip(edge_index_source_to_net, dims=[0])), 
+                                   self.back_conv((h_net, x), torch.flip(edge_index_sink_to_net, dims=[0]), edge_attr = edge_attr_sink_to_net)], dim=1)) + x
         return h, h_net
 
-    def message(self, x_j, edge_weight):
-        return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
+# class HyperConvLayer(MessagePassing):
+#     def __init__(self, net_out_channels, out_channels, aggr='add'):
+#         super().__init__(aggr=aggr)
+
+#         self.phi = Seq(Linear(out_channels, out_channels),
+#                         ReLU(),
+#                         Linear(out_channels, out_channels))
+
+#         self.psi = Seq(Linear(net_out_channels, net_out_channels),
+#                         ReLU(),
+#                         Linear(net_out_channels, net_out_channels))
+        
+#         self.mlp = Seq(Linear(net_out_channels * 3, net_out_channels * 3),
+#                         ReLU(),
+#                         Linear(net_out_channels * 3, net_out_channels))
+
+#         self.conv = SimpleConv()
+#         self.back_conv = GATv2Conv(out_channels, out_channels, edge_dim=1)
+        
+#     def forward(self, x, x_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net, edge_attr_sink_to_net): 
+#         h = self.phi(x) + x
+#         h_net_source = self.conv((h, x_net), edge_index_source_to_net) + x_net
+#         h_net_sink = self.psi(self.propagate(edge_index_sink_to_net, x=(h, x_net), edge_weight=edge_weight_sink_to_net)) + x_net
+#         h_net = self.mlp(torch.concat([x_net, h_net_source, h_net_sink], dim=1)) + x_net
+#         h = self.conv((h_net, h), torch.flip(edge_index_source_to_net, dims=[0])) + self.back_conv((h_net, h), torch.flip(edge_index_source_to_net, dims=[0])) + self.back_conv((h_net, h), torch.flip(edge_index_sink_to_net, dims=[0]), edge_attr = edge_attr_sink_to_net) + x
+        
+#         return h, h_net

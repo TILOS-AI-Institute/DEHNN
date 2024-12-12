@@ -38,16 +38,15 @@ class GNN_node(torch.nn.Module):
         node representations
     """
     def __init__(self, num_layer, emb_dim, out_node_dim, out_net_dim, JK = "concat", residual = True, gnn_type = 'dehnn', norm_type = "layer",
-                        aggregators = ['mean', 'min', 'max', 'std'], # For PNA
+                        aggr = "add", 
                         scalers = ['identity', 'amplification', 'attenuation'], # For PNA
                         deg = None, # For PNA
                         edge_dim = None, # For PNA
-                        use_signnet = False, # For SignNet position encoding
                         node_dim = None, 
                         net_dim = None, 
-                        cfg_posenc = None, # For SignNet position encoding
                         num_nodes = None, # Number of nodes
                         vn = False, 
+                        trans = False, 
                         device = 'cuda'
                     ):
         '''
@@ -69,30 +68,22 @@ class GNN_node(torch.nn.Module):
         self.emb_dim = emb_dim
         self.out_node_dim = out_node_dim
         self.out_net_dim = out_net_dim
-    
         self.gnn_type = gnn_type
-    
-        self.use_signnet = use_signnet
-        self.cfg_posenc = cfg_posenc
-
         self.vn = vn
+        self.trans = trans
         
-        if use_signnet == False:
-            self.node_encoder = nn.Sequential(
-                    nn.Linear(node_dim, emb_dim),
-                    nn.LeakyReLU(negative_slope = 0.05),
-                    nn.Linear(emb_dim, emb_dim)
-            )
+        self.node_encoder = nn.Sequential(
+                nn.Linear(node_dim, emb_dim),
+                nn.LeakyReLU(),
+                nn.Linear(emb_dim, emb_dim)
+        )
 
-            self.net_encoder = nn.Sequential(
-                    nn.Linear(net_dim, emb_dim),
-                    nn.LeakyReLU(negative_slope = 0.05),
-                    nn.Linear(emb_dim, emb_dim)
-            )
-            
-        else:
-            self.node_encoder = SignNetNodeEncoder(cfg = cfg_posenc, dim_in = node_dim, dim_emb = emb_dim, expand_x = True)
-
+        self.net_encoder = nn.Sequential(
+                nn.Linear(net_dim, emb_dim),
+                nn.LeakyReLU(),
+                nn.Linear(emb_dim, emb_dim)
+        )
+        
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")
                 
@@ -105,34 +96,51 @@ class GNN_node(torch.nn.Module):
             
             # self.virtualnode_embedding_top = torch.nn.Embedding(1, emb_dim)
             # torch.nn.init.constant_(self.virtualnode_embedding_top.weight.data, 0)
+            if self.trans:
+                self.transformer_virtualnode_list = torch.nn.ModuleList()
             
-            self.transformer_virtualnode_list = torch.nn.ModuleList()
             self.virtualnode_encoder = nn.Sequential(
-                    nn.Linear(node_dim, emb_dim),
-                    nn.LeakyReLU(negative_slope = 0.05),
-                    nn.Linear(emb_dim, emb_dim)
+                    nn.Linear(node_dim*2, emb_dim*2),
+                    nn.LeakyReLU(),
+                    nn.Linear(emb_dim*2, emb_dim)
             )
+            # self.virtualnode_encoder_net = nn.Sequential(
+            #         nn.Linear(net_dim*2, emb_dim*2),
+            #         nn.LeakyReLU(),
+            #         nn.Linear(emb_dim*2, emb_dim*2)
+            # )
             self.mlp_virtualnode_list = torch.nn.ModuleList()
-            self.gat_virtualnode_list = torch.nn.ModuleList()
+            self.back_virtualnode_list = torch.nn.ModuleList()
+            #self.gat_virtualnode_list = torch.nn.ModuleList()
             #self.top_virtualnode_list = torch.nn.ModuleList()
 
             for layer in range(num_layer):
-                self.transformer_virtualnode_list.append(
-                        nn.TransformerEncoderLayer(d_model=emb_dim, nhead=2)
-                )
-
+                
                 self.mlp_virtualnode_list.append(
                         torch.nn.Sequential(
-                            torch.nn.Linear(emb_dim*2, emb_dim*2), 
-                            torch.nn.LeakyReLU(negative_slope = 0.05),
-                            torch.nn.Linear(emb_dim*2, emb_dim)
+                            torch.nn.Linear(emb_dim*2, emb_dim), 
+                            torch.nn.LeakyReLU(),
+                            torch.nn.Linear(emb_dim, emb_dim)
+                        )
+                )
+                
+                self.back_virtualnode_list.append(
+                        torch.nn.Sequential(
+                            torch.nn.Linear(emb_dim*2, emb_dim), 
+                            torch.nn.LeakyReLU(),
+                            torch.nn.Linear(emb_dim, emb_dim)
                         )
                 )
 
-                if layer < num_layer - 1:
-                    self.gat_virtualnode_list.append(
-                            GATv2Conv(emb_dim, emb_dim, add_self_loops=False, heads=1, concat=False)
+                if self.trans:
+                    self.transformer_virtualnode_list.append(
+                            nn.TransformerEncoderLayer(d_model=emb_dim*2, nhead=8, dim_feedforward=512)
                     )
+
+                # if layer < num_layer - 1:
+                #     self.gat_virtualnode_list.append(
+                #             GATv2Conv(emb_dim, emb_dim, add_self_loops=False, heads=1, concat=False)
+                #     )
                 
                 # self.top_virtualnode_list.append(
                 #         torch.nn.Sequential(
@@ -148,7 +156,7 @@ class GNN_node(torch.nn.Module):
             elif gnn_type == 'gcn':
                 self.convs.append(GCNConv(emb_dim, emb_dim))
             elif gnn_type == 'dehnn':
-                self.convs.append(HyperConvLayer(emb_dim, emb_dim))
+                self.convs.append(HyperConvLayer(emb_dim, emb_dim, aggr=aggr))
             if norm_type == "batch":
                 self.norms.append(torch.nn.BatchNorm1d(emb_dim))
             elif norm_type == "layer":
@@ -156,29 +164,25 @@ class GNN_node(torch.nn.Module):
             else:
                 raise NotImplemented
 
+        self.fc1_node = torch.nn.Linear(emb_dim, 128)
+        self.fc2_node = torch.nn.Linear(128, self.out_node_dim)
 
-        if self.JK == "concat":
-            self.fc1_node = torch.nn.Linear((self.num_layer + 1) * emb_dim, 128)
-            self.fc2_node = torch.nn.Linear(128, self.out_node_dim)
-
-            self.fc1_net = torch.nn.Linear((self.num_layer + 1) * emb_dim, 64)
-            self.fc2_net = torch.nn.Linear(64, self.out_net_dim)
-        else:
-            self.fc1_node = torch.nn.Linear(emb_dim, 128)
-            self.fc2_node = torch.nn.Linear(128, self.out_node_dim)
-
-            self.fc1_net = torch.nn.Linear(emb_dim, 64)
-            self.fc2_net = torch.nn.Linear(64, self.out_net_dim)
+        self.fc1_net = torch.nn.Linear(emb_dim, 64)
+        self.fc2_net = torch.nn.Linear(64, self.out_net_dim)
 
 
     def forward(self, data, device):
-        node_features, net_features, edge_index_sink_to_net, edge_index_source_to_net = data['node'].x.to(device), data['net'].x.to(device), data['node', 'as_a_sink_of', 'net'].edge_index, data['node', 'as_a_source_of', 'net'].edge_index.to(device)
+        node_features, net_features, edge_index_sink_to_net, edge_index_source_to_net = data['node'].node_features.to(device), data['net'].net_features.to(device), data['node', 'as_a_sink_of', 'net'].edge_index, data['node', 'as_a_source_of', 'net'].edge_index.to(device)
 
-        edge_attr_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_attr
+        edge_weight_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_weight
+        #edge_attr_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_attr
+
         edge_index_sink_to_net, edge_mask = dropout_edge(edge_index_sink_to_net, p = 0.2)
         edge_index_sink_to_net = edge_index_sink_to_net.to(device)
-        edge_attr_sink_to_net = edge_attr_sink_to_net[edge_mask].to(device)
-        
+        #edge_weight_sink_to_net = edge_weight_sink_to_net[edge_mask].to(device)
+        #edge_attr_sink_to_net = edge_attr_sink_to_net[edge_mask].to(device)
+
+        #edge_weight_sink_to_net = None
         num_instances = data.num_instances
         
         h_inst = self.node_encoder(node_features)
@@ -187,29 +191,40 @@ class GNN_node(torch.nn.Module):
         if self.vn:
             batch = data.batch.to(device)
             virtualnode_embedding = self.virtualnode_encoder(data.vn.to(device))
-            local_to_vn_edge_index, edge_mask = dropout_edge(data.local_to_vn_edge_index, p = 0.2)
-            local_to_vn_edge_index = local_to_vn_edge_index.to(device)
+
+            # batch_net = data.batch_net.to(device)
+            # virtualnode_embedding_net = self.virtualnode_encoder_net(data.vn_net.to(device))
+            # local_to_vn_edge_index, edge_mask = dropout_edge(data.local_to_vn_edge_index, p = 0.2)
+            # local_to_vn_edge_index = local_to_vn_edge_index.to(device)
             
         for layer in range(self.num_layer):
             if self.vn:
-                h_inst = self.mlp_virtualnode_list[layer](torch.concat([h_inst, virtualnode_embedding[batch]], dim=1))
+                h_inst = self.back_virtualnode_list[layer](torch.concat([h_inst, virtualnode_embedding[batch]], dim=1))
+                #h_net = self.mlp_virtualnode_list[layer](torch.concat([h_net, virtualnode_embedding_net[batch_net]], dim=1))
 
-            h_inst, h_net = self.convs[layer](h_inst, h_net, edge_index_source_to_net, edge_index_sink_to_net, edge_attr_sink_to_net)
-
+            h_inst, h_net = self.convs[layer](h_inst, h_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net)
+            h_inst = self.norms[layer](h_inst)
+            h_net = self.norms[layer](h_net)
             h_inst = torch.nn.functional.leaky_relu(h_inst)
             h_net = torch.nn.functional.leaky_relu(h_net)
             
             if (layer < self.num_layer - 1) and self.vn:
-                virtualnode_embedding = self.gat_virtualnode_list[layer]((h_inst, virtualnode_embedding), local_to_vn_edge_index) + virtualnode_embedding 
-                virtualnode_embedding = self.transformer_virtualnode_list[layer](virtualnode_embedding) 
+                virtualnode_embedding_temp = torch.concat([global_mean_pool(h_inst, batch), global_max_pool(h_inst, batch)], dim=1)
+                #virtualnode_embedding_net_temp = torch.concat([global_mean_pool(h_net, batch_net), global_max_pool(h_net, batch_net)], dim=1) + virtualnode_embedding_net
+
+                if self.trans:
+                    virtualnode_embedding_temp = self.transformer_virtualnode_list[layer](virtualnode_embedding_temp) 
+                    virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
+                else:
+                    virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
+                    #virtualnode_embedding_net = virtualnode_embedding_net_temp
+                    
+                #virtualnode_embedding = self.gat_virtualnode_list[layer]((h_inst, virtualnode_embedding), local_to_vn_edge_index) + virtualnode_embedding 
+                #virtualnode_embedding = self.transformer_virtualnode_list[layer](virtualnode_embedding) 
         #global_max_pool(h_inst, batch) + virtualnode_embedding
                 #virtualnode_embedding = virtualnode_embedding + self.mlp_virtualnode_list[layer](virtualnode_embedding_temp)
             
-        node_representation = h_inst    
-        node_representation = torch.abs(self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(node_representation), negative_slope = 0.01)))
-
-        net_representation = h_net
-        net_representation = torch.abs(self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(net_representation), negative_slope = 0.01)))
-
-        return node_representation, net_representation
+        h_inst = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(h_inst)))
+        h_net = self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(h_net)))
+        return h_inst, h_net
         
