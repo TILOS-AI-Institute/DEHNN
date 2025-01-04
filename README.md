@@ -4,18 +4,13 @@ This is the github repository of The AIStats 2024 paper:
 "DE-HNN: An effective neural model for Circuit Netlist representation.
  Z. Luo, T. Hy, P. Tabaghi, D. Koh, M. Defferrard, E. Rezaei, R. Carey, R. Davis, R. Jain and Y. Wang. 27th Intl. Conf. Artificial Intelligence and Statistics (AISTATS), 2024." [arxiv](https://arxiv.org/abs/2404.00477)
 
-## Important: Recent Updated:
-A new version for UT Austin Data is updated at "de_hnn_tx/" 
+## Important
 
-This new version is easier to use, more compatible, and require much less RAM.
-
-Please see detailed instruction in [New README](de_hnn_tx/README.md)
-
-Following the environment setup is still strongly recommended. 
+### I have updated this github to fit new version of models and data for easier use. Please read this README carefully for new changes. 
 
 ## Environment Setup
 
-We built based on python 3.8.8, CUDA 11.6, Linux Centos 8. 
+We built based on python 3.8.8, CUDA 11.6, Linux Centos 8. Other python version like 3.11, 3.12 should also work.
 
 Please consider using virtual environment like anaconda for easier use. 
 
@@ -31,7 +26,6 @@ If you believe your CUDA version fits the requirements, please run:
 ```commandline
 pip install dgl-cu113 -f https://data.dgl.ai/wheels/repo.html
 pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
-
 ```
 
 Other packages can be installed by run:
@@ -40,63 +34,52 @@ Other packages can be installed by run:
 pip install -r requirements.txt
 ```
 
+## Memory Usage
 
-## How to Download Netlist Data
+We train and test our model on a NVIDIA A100, the model require at least 40 GBs to run the full version (with VNs) and at least 32 GBs to run the smaller version (without VNs).
 
-A seperate README for Netlist Data is available here: [Data README](README_DATA.md)
+If you encounter OOM problem, please consider further decrease the size of the model (layers and number of dimensions).
 
-Raw data is available at [link](https://zenodo.org/records/10795280?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6Ijk5NjM2MzZiLTg0ZmUtNDI2My04OTQ3LTljMjA5ZjA3N2Y1OSIsImRhdGEiOnt9LCJyYW5kb20iOiJlYzFmMGJlZTU3MzE1OWMzOTU2MWZkYTE3MzY5ZjRjOCJ9.WifQFExjW1CAW0ahf3e5Qr0OV9c2cw9_RUbOXUsvRbnKlkApNZwVCL_VPRJvAve0MJDC0DDOSx_RLiTvBimr0w). 
+## Data **READ THIS SECTION CAREFULLY**
 
-After downloading the raw data, please extract and put the raw data directory to "/de_hnn/data/" directory.
+For quick usage, reading the data README is strongly recommended but not required. A seperate README for Netlist Data is available here: [Data README](README_DATA.md). 
 
-After that, please run following command to generate the full processed dataset. The whole process can last for hours.
+Raw data, Processed data and Older version data are all available at [link](https://zenodo.org/records/14599896)
 
-```commandline
-source run_all_python_scripts.sh
-```
-### Skip Processing Data
+If you only want to use the processed data, please download the file **superblue.zip**
 
-If one does not want to process the raw data for any reason but just need the processed data, the full processed data is also available at [link](https://zenodo.org/records/10795280?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6Ijk5NjM2MzZiLTg0ZmUtNDI2My04OTQ3LTljMjA5ZjA3N2Y1OSIsImRhdGEiOnt9LCJyYW5kb20iOiJlYzFmMGJlZTU3MzE1OWMzOTU2MWZkYTE3MzY5ZjRjOCJ9.WifQFExjW1CAW0ahf3e5Qr0OV9c2cw9_RUbOXUsvRbnKlkApNZwVCL_VPRJvAve0MJDC0DDOSx_RLiTvBimr0w).
+After downloading the processed data, please extract and put the data directory to "/de_hnn/data/" directory. You should be able to see a new directory called **superblue** after this.
 
-After downloading the processed data, please extract and put the data directory to "/de_hnn/data/" directory.
+## How to load the dataset 
 
-## How to train 
-
-After the data is processed, the experiments can be run following the instrcutions below. 
-
-### Simple Test
-
-First, enter directory "/de_hnn/experiments/cross_design/".
-
-A simple test on cross-design full-DE-HNN can be run using the following command:
+After the data is processed (or downloaded), the dataset can be created the instrcutions below:
 
 ```commandline
-source run_simple_test.sh
+python run_all_data.py
 ```
-A training process will be initiated immediately. This is a simple test just to test if codes are ready to use. 
 
+A loading process will be initiated immediately. This will create the pytorch-geometric data objects for you to use.
 
-A more complete test run with full number of epoches can be run using the following command:
+The data objects will be saved at **"superblue/superblue_{design number}/"**
+
+## For running experiments
+
+After dataset are created and saved, next, go to "/dehnn/" directory
+
+In the file **train_all_cross.py**, you can set the hyperparameters and config for the model you want to train, and how to split the dataset. 
+
+Please carefully read through that file and change based on your need (your device, Memory Usage, model type, and more)
+
+And then, run
 
 ```commandline
-source run_full_test.sh
+python train_all_cross.py
 ```
 
-The whole process might take 30 minutes to hours depending on devices, which will produce the full results for full-DE-HNN for cross-design.
+if you want to run with default device, otherwise, you can indicate which cuda device to use, using:
 
-
-### For full single-design experiments
-
-All files are ready in directory "/de_gnn/experiments/single_design/".
-
-Please run the commands in this format "source run_all_{model}.sh" depending on which model you want to run. 
-
-
-### For full cross-design experiments
-
-All files are ready in directory "/de_gnn/experiments/cross_design/".
-
-Please run the commands in this format "source run_all_{model}.sh" depending on which model you want to run.
-
+```commandline
+CUDA_VISIBLE_DEVICES={your device number} python train_all_cross.py
+```
 
 Thank you!
