@@ -64,40 +64,29 @@ Targets:
 - Cell-based Congestion Classification: Similar to (Yang et al., 2022) and (Wang et al., 2022), we classify the cell-based congestion values (computed as the ratio of cell demand/cell capacity) into (a) [0,0.9], not-congested ; and (b) [0.9, inf]; congested.
 
 In folder 
-"2023-03-06_data/" 
-which can be downloaded at [link](https://zenodo.org/records/10795280?token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6Ijk5NjM2MzZiLTg0ZmUtNDI2My04OTQ3LTljMjA5ZjA3N2Y1OSIsImRhdGEiOnt9LCJyYW5kb20iOiJlYzFmMGJlZTU3MzE1OWMzOTU2MWZkYTE3MzY5ZjRjOCJ9.WifQFExjW1CAW0ahf3e5Qr0OV9c2cw9_RUbOXUsvRbnKlkApNZwVCL_VPRJvAve0MJDC0DDOSx_RLiTvBimr0w), 
+"superblue/" 
+which can be downloaded at [link](https://zenodo.org/records/14599896), 
 all the files corresponding to each design are expressed as 
-"index.{file_name}.pkl"
-**Notice that, index is not a design number.** If one needs the map from index to design number, please load the Python dictionary file:
-```python
-import pickle
-
-with open("2023-03-06_data/all.idx_to_design.pkl", "rb") as f:
-    dict = pickle.load(f)
-```
-
-Below is a file description for some files/folders used for only for experiments setup:
-    - cross_validation/: The folder contains all the splits information we used to do **cross design** experiments. 
-    - split/: The folder contains all splits to do cross validation we used to do **single design** experiments. 
+"{design_number}/{file_name}.pkl"
 
 Below is a file description for each design/netlist (there is only one netlist for each design):
-- {idx}.bipartite.pkl: The connectivity information between cells and nets of the bipartite graph representation of a netlist. 
-- {idx}.degree.pkl: The degrees information of cells and nets.
-- {idx}.eigen.10.pkl: The top-10 eigenvectors and eigenvalues.
-- {idx}.global_information.pkl: The global information of a netlist. 
-- {idx}.metis_part_dict.pkl: The Metis (Karypis and Kumar, 1998) [link](https://github.com/KarypisLab/METIS) based partition information. 
-- {idx}.net_demand_capacity.pkl: The demands and capacity information of each net. 
-- {idx}.net_features.pkl: The features of each net.
-- {idx}.net_hpwl.pkl: The Half-perimeter wirelength (HPWL) for each net. 
-- {idx}.nn_conn.pkl: The connectivity file prepared for NetlistGNN (Yang et al., 2022). [link](https://github.com/PKUterran/NetlistGNN) 
-- {idx}.node_features.pkl: The features of each node. 
-- {idx}.targets.pkl: The processed targets or labels of each cell/net to predict.
+- bipartite.pkl: The connectivity information between cells and nets of the bipartite graph representation of a netlist. 
+- degree.pkl: The degrees information of cells and nets.
+- eigen.10.pkl: The top-10 eigenvectors and eigenvalues.
+- global_information.pkl: The global information of a netlist. 
+- metis_part_dict.pkl: The Metis (Karypis and Kumar, 1998) [link](https://github.com/KarypisLab/METIS) based partition information. 
+- net_demand_capacity.pkl: The demands and capacity information of each net. 
+- net_features.pkl: The features of each net.
+- net_hpwl.pkl: The Half-perimeter wirelength (HPWL) for each net. 
+- nn_conn.pkl: The connectivity file prepared for NetlistGNN (Yang et al., 2022). [link](https://github.com/PKUterran/NetlistGNN) 
+- node_features.pkl: The features of each node. 
+- targets.pkl: The processed targets or labels of each cell/net to predict.
 - node_neighbors/{idx}.node_neighbor_features.pkl: The neighborhood features for each cell/node. 
     
 Notice that there are another several files, which are not related to the main text in our paper, but is used in our appendix:
-- {idx}.pl_fix_part_dict.pkl: The fixed-size bounding box based partition information (when placement info available).
-- {idx}.pl_part_dict.pkl: The relative-size bounding box (the number of boxes is same for all netlist) based partition information (when placement info available).
-- {idx}.star.pkl: The "star" graph representation where only cells and the connectivities between cells are included. Please refer to appendix for more details. 
-- {idx}.star_part_dict: The Metis based partition, but on star graph representation of each netlist.              
+- pl_fix_part_dict.pkl: The fixed-size bounding box based partition information (when placement info available).
+- pl_part_dict.pkl: The relative-size bounding box (the number of boxes is same for all netlist) based partition information (when placement info available).
+- star.pkl: The "star" graph representation where only cells and the connectivities between cells are included. Please refer to appendix for more details. 
+- star_part_dict: The Metis based partition, but on star graph representation of each netlist.              
 
 
