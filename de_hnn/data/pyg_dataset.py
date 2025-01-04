@@ -113,14 +113,14 @@ class NetlistDataset(Dataset):
                 example.part_id = part_id
                 example.top_part_id = top_part_id
 
-                file_name = data_dir + '/' + str(sample) + '.net_demand_capacity.pkl'
+                file_name = data_load_fp + '/' + 'net_demand_capacity.pkl'
                 f = open(file_name, 'rb')
                 net_demand_dictionary = pickle.load(f)
                 f.close()
 
                 net_demand = torch.Tensor(net_demand_dictionary['demand'])
 
-                file_name = data_dir + '/' + str(sample) + '.targets.pkl'
+                file_name = data_load_fp + '/' + 'targets.pkl'
                 f = open(file_name, 'rb')
                 node_demand_dictionary = pickle.load(f)
                 f.close()
