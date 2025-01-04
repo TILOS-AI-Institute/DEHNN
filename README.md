@@ -40,7 +40,7 @@ We train and test our model on a NVIDIA A100, the model require at least 40 GBs 
 
 If you encounter OOM problem, please consider further decrease the size of the model (layers and number of dimensions).
 
-## Data **Important**
+## Data 
 
 For quick usage, reading the data README is strongly recommended but not required. A seperate README for Netlist Data is available here: [Data README](README_DATA.md). 
 
