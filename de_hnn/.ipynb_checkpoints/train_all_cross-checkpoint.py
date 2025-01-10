@@ -44,9 +44,9 @@ def compute_metrics(true_labels, predicted_labels):
 ### hyperparameter ###
 test = False # if only test but not train
 restart = False # if restart training
-reload_dataset = True # if reload already processed h_dataset
+reload_dataset = False # if reload already processed h_dataset
 
-model_type = "dehnn" #this can be onr of ["dehnn", "digcn", "digat"]
+model_type = "dehnn" #this can be one of ["dehnn", "dehnn_att", "digcn", "digat"] "dehnn_att" might need large memory usage
 num_layer = 3 #large number will cause OOM
 num_dim = 32 #large number will cause OOM
 vn = False #use virtual node or not
@@ -59,7 +59,7 @@ if not reload_dataset:
     dataset = NetlistDataset(data_dir="data/superblue", load_pe = True, pl = True, processed = True, load_indices=None)
     h_dataset = []
     for data in tqdm(dataset):
-        num_instances = data.node_congestion.shape[0]
+        num_instances = data.node_features.shape[0]
         data.num_instances = num_instances
         data.edge_index_sink_to_net[1] = data.edge_index_sink_to_net[1] - num_instances
         data.edge_index_source_to_net[1] = data.edge_index_source_to_net[1] - num_instances
@@ -95,6 +95,11 @@ if not reload_dataset:
         num_vn = len(np.unique(batch))
         vn_node = torch.concat([global_mean_pool(h_data['node'].x, batch), 
                 global_max_pool(h_data['node'].x, batch)], dim=1)
+
+        node_demand = (node_demand - torch.mean(node_demand)) / torch.std(node_demand)
+        net_hpwl = (net_hpwl - torch.mean(net_hpwl)) / torch.std(net_hpwl)
+        net_demand = (net_demand - torch.mean(net_demand))/ torch.std(net_demand)
+
         variant_data_lst.append((node_demand, net_hpwl, net_demand, batch, num_vn, vn_node)) 
         h_data['variant_data_lst'] = variant_data_lst
         h_dataset.append(h_data)
@@ -119,10 +124,10 @@ criterion_node = nn.MSELoss()
 criterion_net = nn.MSELoss()
 optimizer = optim.AdamW(model.parameters(), lr=learning_rate,  weight_decay=0.01)
 load_data_indices = [idx for idx in range(len(h_dataset))]
-all_train_indices, all_valid_indices, all_test_indices = load_data_indices[:9], load_data_indices[9:], load_data_indices[9:]
+all_train_indices, all_valid_indices, all_test_indices = load_data_indices[:10], load_data_indices[10:], load_data_indices[10:]
 best_total_val = None
 
-for epoch in range(1000):
+for epoch in range(500):
     np.random.shuffle(all_train_indices)
     loss_node_all = 0
     loss_net_all = 0
@@ -139,6 +144,8 @@ for epoch in range(1000):
             data.num_vn = num_vn
             data.vn = vn_node
             node_representation, net_representation = model(data, device)
+            node_representation = torch.squeeze(node_representation)
+            net_representation = torch.squeeze(net_representation)
 
             loss_node = criterion_node(node_representation, target_node.to(device))
             loss_net = criterion_net(net_representation, target_net_demand.to(device))
@@ -160,6 +167,8 @@ for epoch in range(1000):
             data.num_vn = num_vn
             data.vn = vn_node
             node_representation, net_representation = model(data, device)
+            node_representation = torch.squeeze(node_representation)
+            net_representation = torch.squeeze(net_representation)
             
             val_loss_node = criterion_node(node_representation, target_node.to(device))
             val_loss_net = criterion_net(net_representation, target_net_demand.to(device))
