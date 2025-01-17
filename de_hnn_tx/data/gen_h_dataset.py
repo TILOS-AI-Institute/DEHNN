@@ -1,109 +1,100 @@
-import os
-import shutil
-import numpy as np
-import pickle
 import torch
-import torch.nn
-from torch_geometric.data import Dataset
-from torch_geometric.data import Data
-
-from sklearn.model_selection import train_test_split
+from torch_geometric.utils import scatter
+from torch_geometric.data import HeteroData
+import numpy as np
 from tqdm import tqdm
+import os
+import pickle
 
-from collections import defaultdict
-from utils import *
-
-from pyg_dataset import NetlistDataset
-from torch_geometric.data import Data, HeteroData
-from torch_geometric.nn.conv.gcn_conv import gcn_norm
-
-
-data_dir = "cross_design_data_updated"
-load_indices = None
-pl = True
-load_pe = True
-density = True
-
-dataset = NetlistDataset(data_dir="cross_design_data_updated", load_pe = True, pl = True, processed = True, load_indices=None)
-
-all_files = np.array(os.listdir(data_dir))
-
-data_dic = {}
-
-for data in dataset:
-    data_dic[data.design_name.split("_")[1]] = data
-
-h_dataset = []
+def process_vlsi_dataset(dataset, target_data_dir):
+    """
+    Process VLSI dataset to create heterogeneous graphs with layout information.
     
-for design_fp in tqdm(all_files):
-    design_num = design_fp.split("_")[1]
-    data = data_dic[design_num]
+    Args:
+        dataset: Input dataset containing VLSI design information
+        target_data_dir: Directory containing target layout data
     
-    with open(os.path.join(data_dir, design_fp, 'node_loc_x.pkl'), 'rb') as f:
-        node_loc_x = pickle.load(f)
-    with open(os.path.join(data_dir, design_fp, 'node_loc_y.pkl'), 'rb') as f:
-        node_loc_y = pickle.load(f)
-    with open(os.path.join(data_dir, design_fp, 'target_net_hpwl.pkl'), 'rb') as f:
-        net_hpwl = pickle.load(f)
-    with open(os.path.join(data_dir, design_fp, 'target_node_congestion_level.pkl'), 'rb') as f:
-        node_congestion = pickle.load(f)
+    Returns:
+        List[HeteroData]: Processed heterogeneous graph dataset
+    """
+    def filter_edges(data, degree_threshold=3000):
+        out_degrees = data.net_features[:, 1]
+        mask = (out_degrees < degree_threshold)
+        
+        # Filter source-to-net edges
+        mask_source = mask[data.edge_index_source_to_net[1]]
+        data.edge_index_source_to_net = data.edge_index_source_to_net[:, mask_source]
+        
+        # Filter sink-to-net edges
+        mask_sink = mask[data.edge_index_sink_to_net[1]]
+        data.edge_index_sink_to_net = data.edge_index_sink_to_net[:, mask_sink]
+        
+        return data
 
-    if node_loc_x.shape[0] != 633162:
-        continue
+    def load_layout_data(design_fp, target_data_dir):
+        base_path = os.path.join(target_data_dir, design_fp)
+        layout_data = {}
+        
+        for file_name, key in [
+            ('node_loc_x.pkl', 'x'),
+            ('node_loc_y.pkl', 'y'),
+            ('target_net_hpwl.pkl', 'hpwl'),
+            ('target_node_utilization.pkl', 'congestion')
+        ]:
+            with open(os.path.join(base_path, file_name), 'rb') as f:
+                layout_data[key] = pickle.load(f)
+        
+        return layout_data
 
-    if np.mean(node_congestion) == 0:
-        continue
+    def process_variant_data(data, pos_lst, node_congestion, net_hpwl):
+        edge_index = torch.concat([data.edge_index_source_to_net, data.edge_index_sink_to_net], dim=1)
+        
+        # Calculate edge attributes
+        node_pos_lst = pos_lst[data.edge_index_sink_to_net[0]]
+        net_pos_lst = pos_lst[data.edge_index_source_to_net[0]][data.edge_index_sink_to_net[1]]
+        edge_attr = torch.sum(torch.abs(node_pos_lst - net_pos_lst), dim=1)
+        
+        # Process node positions for nets
+        source_nodes = edge_index[0]
+        target_nodes = edge_index[1]
+        values_per_edge = pos_lst[source_nodes]
+        pos_lst_net = scatter(values_per_edge, target_nodes, dim=0, reduce="mean")
+        
+        return pos_lst, pos_lst_net, edge_attr, node_congestion/580, net_hpwl
 
-    file_name = os.path.join(data_dir, design_fp, 'pl_part_dict.pkl')
-    f = open(file_name, 'rb')
-    part_dict = pickle.load(f)
-    f.close()
-    batch = [part_dict[idx] for idx in range(node_congestion.shape[0])]
-    num_vn = len(np.unique(batch))
-    batch = torch.tensor(batch).long()
+    h_dataset = []
+    for data in tqdm(dataset, desc="Processing designs"):
+        # Filter edges based on degree threshold
+        data = filter_edges(data)
+        
+        # Create heterogeneous graph
+        h_data = HeteroData()
+        h_data['node'].node_features = data.node_features
+        h_data['net'].net_features = data.net_features
+        h_data.num_instances = data.node_features.shape[0]
+        h_data['node', 'as_a_sink_of', 'net'].edge_index = data.edge_index_sink_to_net
+        h_data['node', 'as_a_source_of', 'net'].edge_index = data.edge_index_source_to_net
+        
+        # Process variants
+        design_num = data['design_name'].split("_")[1]
+        variant_data_lst = []
+        
+        for design_fp in os.listdir(target_data_dir):
+            if design_num == design_fp.split("_")[1]:
+                layout_data = load_layout_data(design_fp, target_data_dir)
+                
+                pos_lst = torch.tensor(np.vstack([layout_data['x'], layout_data['y']]).T)
+                assert pos_lst.shape[0] == h_data['node'].node_features.shape[0]
+                
+                variant_data = process_variant_data(
+                    data,
+                    pos_lst,
+                    torch.tensor(layout_data['congestion']).float(),
+                    torch.tensor(layout_data['hpwl']).float()
+                )
+                variant_data_lst.append(variant_data)
+        
+        h_data['variant_data_lst'] = variant_data_lst
+        h_dataset.append(h_data)
     
-    node_congestion = torch.tensor(node_congestion)
-    net_hpwl = torch.tensor(net_hpwl).float()
-    
-    node_congestion = (node_congestion >= 3).long()
-    num_instances = node_congestion.shape[0]
-    
-    pos_lst = torch.tensor(np.vstack([node_loc_x, node_loc_y]).T)
-    
-    node_pos_lst = pos_lst[data.edge_index_sink_to_net[0]]
-    net_pos_lst = pos_lst[data.edge_index_source_to_net[0]][data.edge_index_sink_to_net[1]]
-    
-    out_degrees = data.net_features[:, 1]
-    mask = (out_degrees < 3000)
-    mask_edges = mask[data.edge_index_source_to_net[1]] 
-    filtered_edge_index = data.edge_index_source_to_net[:, mask_edges]
-    data.edge_index_source_to_net = filtered_edge_index
-    
-    mask_edges = mask[data.edge_index_sink_to_net[1]]
-    filtered_edge_index = data.edge_index_sink_to_net[:, mask_edges]
-    data.edge_index_sink_to_net = filtered_edge_index
-    
-    h_data = HeteroData()
-    h_data['node'].x = data.node_features
-    h_data['node'].y = node_congestion
-    
-    h_data['net'].x = data.net_features
-    h_data['net'].y = net_hpwl
-    
-    h_data['node', 'as_a_sink_of', 'net'].edge_index, h_data['node', 'as_a_sink_of', 'net'].edge_weight = gcn_norm(data.edge_index_sink_to_net, add_self_loops=False)
-    h_data['node', 'as_a_source_of', 'net'].edge_index = data.edge_index_source_to_net
-    h_data['node', 'as_a_sink_of', 'net'].edge_attr = torch.sum(torch.abs(node_pos_lst - net_pos_lst), dim=1)[mask_edges]
-    
-    h_data.batch = batch
-    h_data.num_vn = num_vn
-    h_data.num_instances = num_instances
-    
-    h_data['node', 'as_a_sink_of', 'net'].edge_index, h_data['node', 'as_a_sink_of', 'net'].edge_weight = gcn_norm(data.edge_index_sink_to_net, add_self_loops=False)
-    h_data['node', 'as_a_source_of', 'net'].edge_index = data.edge_index_source_to_net
-    _, h_data['net', 'sink_to', 'node'].edge_weight = gcn_norm(torch.flip(h_data['node', 'as_a_sink_of', 'net'].edge_index, dims=[0]), add_self_loops=False)
-
-    h_data.pos = pos_lst
-    h_data.num_instances = num_instances
-    h_dataset.append(h_data)
-
-torch.save(h_dataset, f"../147_dataset.pt")
+    return h_dataset

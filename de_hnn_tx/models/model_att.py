@@ -1,3 +1,4 @@
+import sys
 import torch
 import math
 import torch.nn as nn
@@ -23,14 +24,43 @@ from torch_geometric.utils import (
     to_edge_index,
 )
 
-from performer_pytorch import Performer
 
-import sys
+from unet import UNet
+
 sys.path.append("./layers/")
 from dehnn_layers import HyperConvLayer
 
 from torch_geometric.utils.dropout import dropout_edge
 from torch_geometric.nn.conv import GCNConv, GATv2Conv
+
+class UtilMapConverter:
+    def __init__(self, pos_lst, num_sites_x, num_sites_y, device):
+        """Initialize converter with position-dependent calculations"""
+        self.num_sites_x = num_sites_x
+        self.num_sites_y = num_sites_y
+        self.device = device
+        
+        # Pre-compute indices for both conversion directions
+        self.indices = (pos_lst[:, 0].long() * num_sites_y + pos_lst[:, 1].long()).to(device)
+        
+    def to_util_map(self, node_features, max_sum):
+        """Convert node features to utilization map"""
+        num_channels = node_features.shape[1]
+        indices = self.indices.unsqueeze(1).expand(node_features.shape[0], num_channels)
+        
+        if max_sum == 'amax':
+            min_value = torch.min(node_features).item()
+            util_map = torch.full((self.num_sites_x * self.num_sites_y, num_channels), min_value, device=self.device)
+        elif max_sum == 'sum':
+            util_map = torch.zeros((self.num_sites_x * self.num_sites_y, num_channels), device=self.device)
+        
+        util_map.scatter_reduce_(0, indices, node_features, reduce=max_sum, include_self=True)
+        return util_map.view(self.num_sites_x, self.num_sites_y, num_channels)
+    
+    def to_node_features(self, util_map_flat):
+        """Map utilization map back to node features"""
+        #util_map_flat = util_map.view(-1, util_map.shape[2])
+        return util_map_flat[self.indices]
 
 class GNN_node(torch.nn.Module):
     """
@@ -46,7 +76,7 @@ class GNN_node(torch.nn.Module):
                         net_dim = None, 
                         num_nodes = None, # Number of nodes
                         vn = False, 
-                        trans = False, 
+                        cv = False, 
                         device = 'cuda'
                     ):
         '''
@@ -70,7 +100,7 @@ class GNN_node(torch.nn.Module):
         self.out_net_dim = out_net_dim
         self.gnn_type = gnn_type
         self.vn = vn
-        self.trans = trans
+        self.cv = cv
         
         self.node_encoder = nn.Sequential(
                 nn.Linear(node_dim, emb_dim),
@@ -91,28 +121,17 @@ class GNN_node(torch.nn.Module):
         self.norms = torch.nn.ModuleList()
 
         if self.vn:
-            #self.virtualnode_embedding = torch.nn.Embedding(1, emb_dim)   
-            #torch.nn.init.constant_(self.virtualnode_embedding.weight.data, 0)
-            
-            # self.virtualnode_embedding_top = torch.nn.Embedding(1, emb_dim)
-            # torch.nn.init.constant_(self.virtualnode_embedding_top.weight.data, 0)
-            if self.trans:
-                self.transformer_virtualnode_list = torch.nn.ModuleList()
+            if self.cv:
+                self.cv_virtualnode_list = torch.nn.ModuleList()
             
             self.virtualnode_encoder = nn.Sequential(
                     nn.Linear(node_dim*2, emb_dim*2),
                     nn.LeakyReLU(),
                     nn.Linear(emb_dim*2, emb_dim)
             )
-            # self.virtualnode_encoder_net = nn.Sequential(
-            #         nn.Linear(net_dim*2, emb_dim*2),
-            #         nn.LeakyReLU(),
-            #         nn.Linear(emb_dim*2, emb_dim*2)
-            # )
+
             self.mlp_virtualnode_list = torch.nn.ModuleList()
             self.back_virtualnode_list = torch.nn.ModuleList()
-            #self.gat_virtualnode_list = torch.nn.ModuleList()
-            #self.top_virtualnode_list = torch.nn.ModuleList()
 
             for layer in range(num_layer):
                 
@@ -132,23 +151,18 @@ class GNN_node(torch.nn.Module):
                         )
                 )
 
-                if self.trans:
-                    self.transformer_virtualnode_list.append(
-                            nn.TransformerEncoderLayer(d_model=emb_dim*2, nhead=8, dim_feedforward=512)
+                if self.cv:
+                    # if layer == num_layer - 1:
+                    #     n_classes = 1
+                    # else:
+                    #     n_classes = emb_dim
+                        
+                    self.cv_virtualnode_list.append(
+                        UNet(n_channels=emb_dim, n_classes=emb_dim, input_type=2)
                     )
 
-                # if layer < num_layer - 1:
-                #     self.gat_virtualnode_list.append(
-                #             GATv2Conv(emb_dim, emb_dim, add_self_loops=False, heads=1, concat=False)
-                #     )
-                
-                # self.top_virtualnode_list.append(
-                #         torch.nn.Sequential(
-                #             torch.nn.Linear(emb_dim, emb_dim),
-                #             torch.nn.LeakyReLU(negative_slope = 0.01),
-                #             torch.nn.Linear(emb_dim, emb_dim)
-                #         )
-                # )
+                self.fc1_vn = torch.nn.Linear(emb_dim, 128)
+                self.fc2_vn = torch.nn.Linear(128, self.out_node_dim)
 
         for layer in range(num_layer):
             if gnn_type == 'gat':
@@ -172,59 +186,53 @@ class GNN_node(torch.nn.Module):
 
 
     def forward(self, data, device):
-        node_features, net_features, edge_index_sink_to_net, edge_index_source_to_net = data['node'].x.to(device), data['net'].x.to(device), data['node', 'as_a_sink_of', 'net'].edge_index, data['node', 'as_a_source_of', 'net'].edge_index.to(device)
+        h_inst = data['node'].x.to(device)
+        h_net = data['net'].x.to(device)
+        edge_index_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_index.to(device)
+        edge_index_source_to_net = data['node', 'as_a_source_of', 'net'].edge_index.to(device)
+        edge_attr_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_attr.to(device)
+        pos_lst = data.pos_lst
 
-        edge_weight_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_weight
-        edge_attr_sink_to_net = data['node', 'as_a_sink_of', 'net'].edge_attr
-
-        edge_index_sink_to_net, edge_mask = dropout_edge(edge_index_sink_to_net, p = 0.2)
-        edge_index_sink_to_net = edge_index_sink_to_net.to(device)
-        #edge_weight_sink_to_net = edge_weight_sink_to_net[edge_mask].to(device)
-        edge_attr_sink_to_net = edge_attr_sink_to_net[edge_mask].to(device)
-
-        #edge_weight_sink_to_net = None
+        num_features = h_inst.shape[1]
         num_instances = data.num_instances
-        
-        h_inst = self.node_encoder(node_features)
-        h_net = self.net_encoder(net_features)
+        num_sites_x = data.num_sites_x
+        num_sites_y = data.num_sites_y
+        converter = UtilMapConverter(pos_lst, num_sites_x, num_sites_y, device)
 
         if self.vn:
-            batch = data.batch.to(device)
-            virtualnode_embedding = self.virtualnode_encoder(data.vn.to(device))
-
-            # batch_net = data.batch_net.to(device)
-            # virtualnode_embedding_net = self.virtualnode_encoder_net(data.vn_net.to(device))
-            # local_to_vn_edge_index, edge_mask = dropout_edge(data.local_to_vn_edge_index, p = 0.2)
-            # local_to_vn_edge_index = local_to_vn_edge_index.to(device)
+            virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, 'sum').view(num_sites_x*num_sites_y, num_features), 
+                                     converter.to_util_map(h_inst, 'amax').view(num_sites_x*num_sites_y, num_features)], dim=1) #shape (num_sites_x*num_sites_y, num_features)
             
+            virtualnode_embedding = self.virtualnode_encoder(virtualnode_embedding_temp) #shape (num_sites_x*num_sites_y, num_features)
+        
+        h_inst = self.node_encoder(h_inst)
+        h_net = self.net_encoder(h_net)
+        
         for layer in range(self.num_layer):
             if self.vn:
-                h_inst = self.back_virtualnode_list[layer](torch.concat([h_inst, virtualnode_embedding[batch]], dim=1))
-                #h_net = self.mlp_virtualnode_list[layer](torch.concat([h_net, virtualnode_embedding_net[batch_net]], dim=1))
+                h_inst = self.back_virtualnode_list[layer](torch.concat([h_inst, converter.to_node_features(virtualnode_embedding)], dim=1))
 
-            h_inst, h_net = self.convs[layer](h_inst, h_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net, edge_attr_sink_to_net)
+            h_inst, h_net = self.convs[layer](h_inst, h_net, edge_index_source_to_net, edge_index_sink_to_net, edge_attr_sink_to_net)
             h_inst = self.norms[layer](h_inst)
             h_net = self.norms[layer](h_net)
             h_inst = torch.nn.functional.leaky_relu(h_inst)
             h_net = torch.nn.functional.leaky_relu(h_net)
             
-            if (layer < self.num_layer - 1) and self.vn:
-                virtualnode_embedding_temp = torch.concat([global_mean_pool(h_inst, batch), global_max_pool(h_inst, batch)], dim=1)
-                #virtualnode_embedding_net_temp = torch.concat([global_mean_pool(h_net, batch_net), global_max_pool(h_net, batch_net)], dim=1) + virtualnode_embedding_net
-
-                if self.trans:
-                    virtualnode_embedding_temp = self.transformer_virtualnode_list[layer](virtualnode_embedding_temp) 
+            if self.vn:
+                virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, 'sum').view(num_sites_x*num_sites_y, self.emb_dim), 
+                                     converter.to_util_map(h_inst, 'amax').view(num_sites_x*num_sites_y, self.emb_dim)], dim=1)
+                if self.cv:
                     virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
+                    virtualnode_embedding = self.cv_virtualnode_list[layer](virtualnode_embedding.view(1, self.emb_dim, num_sites_y, num_sites_x)).view(num_sites_x*num_sites_y, self.emb_dim) + virtualnode_embedding
                 else:
                     virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
-                    #virtualnode_embedding_net = virtualnode_embedding_net_temp
-                    
-                #virtualnode_embedding = self.gat_virtualnode_list[layer]((h_inst, virtualnode_embedding), local_to_vn_edge_index) + virtualnode_embedding 
-                #virtualnode_embedding = self.transformer_virtualnode_list[layer](virtualnode_embedding) 
-        #global_max_pool(h_inst, batch) + virtualnode_embedding
-                #virtualnode_embedding = virtualnode_embedding + self.mlp_virtualnode_list[layer](virtualnode_embedding_temp)
             
         h_inst = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(h_inst)))
         h_net = self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(h_net)))
-        return h_inst, h_net
+        
+        if self.vn:
+            virtualnode_embedding = self.fc2_vn(torch.nn.functional.leaky_relu(self.fc1_vn(virtualnode_embedding)))
+            return h_inst, h_net, virtualnode_embedding
+        else:
+            return h_inst, h_net, None
         
