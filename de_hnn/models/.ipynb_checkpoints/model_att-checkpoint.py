@@ -189,7 +189,7 @@ class GNN_node(torch.nn.Module):
                 else:
                     virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
             
-        h_inst_avg = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(h_inst)))
-        h_inst_std = self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(h_inst)))
-        return h_inst_avg, h_inst_std
+        h_inst = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(h_inst)))
+        h_net = self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(h_net)))
+        return h_inst, h_net
         
