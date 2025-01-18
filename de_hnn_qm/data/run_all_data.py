@@ -13,4 +13,6 @@ from tqdm import tqdm
 from collections import defaultdict
 from pyg_dataset import NetlistDataset
 
-dataset = NetlistDataset(data_dir="all_designs_netlist_data", load_pe = True, pl = True, processed = False)
+dataset = NetlistDataset(data_dir="superblue", load_pe = True, load_pd = True, pl = True, processed = True, load_indices=None, density = True)
+
+print(dataset[0])

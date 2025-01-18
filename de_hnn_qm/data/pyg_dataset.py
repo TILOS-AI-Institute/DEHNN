@@ -10,105 +10,166 @@ import numpy as np
 from utils import *
 
 class NetlistDataset(Dataset):
-    def __init__(self, data_dir, load_pe = True, num_eigen = 5, pl = True, processed = False, load_indices = None):
+    def __init__(self, data_dir, load_pe = True, load_pd = True, num_eigen = 10, pl = True, processed = False, load_indices = None, density = False):
         super().__init__()
         self.data_dir = data_dir
         self.data_lst = []
 
-        raw_all_files = np.array(os.listdir(data_dir))
-        all_files = []
+        all_files = np.array(os.listdir(data_dir))
         
         if load_indices is not None:
-            for file in raw_all_files:
-                design_num = file.split("_")[1]
-                if design_num in load_indices:
-                    all_files.append(file)
-
-        else:
-            all_files = raw_all_files
+            load_indices = np.array(load_indices)
+            all_files = all_files[load_indices]
             
         for design_fp in tqdm(all_files):
+            #print(design_fp)
             data_load_fp = os.path.join(data_dir, design_fp, 'pyg_data.pkl')
-            if os.path.exists(data_load_fp) and processed:
+            if processed and os.path.exists(data_load_fp):
                 data = torch.load(data_load_fp)
             else:
-                try:
-                    with open(os.path.join(data_dir, design_fp, 'net2sink_nodes.pkl'), 'rb') as f:
-                        net2sink = pickle.load(f)
-        
-                    with open(os.path.join(data_dir, design_fp, 'net2source_node.pkl'), 'rb') as f:
-                        net2source = pickle.load(f)
-        
-                    with open(os.path.join(data_dir, design_fp, 'node_type_id.pkl'), 'rb') as f:
-                        node_type = pickle.load(f)
-                    
-                    with open(os.path.join(data_dir, design_fp, 'node_size_x.pkl'), 'rb') as f:
-                        node_size_x = pickle.load(f)
-                    
-                    with open(os.path.join(data_dir, design_fp, 'node_size_y.pkl'), 'rb') as f:
-                        node_size_y = pickle.load(f)
-        
-                    with open(os.path.join(data_dir, design_fp, 'eigen.5.pkl'), 'rb') as f:
-                        eig_dict = pickle.load(f)
-                        eig_vec = eig_dict['evects']
+                data_load_fp = os.path.join(data_dir, design_fp)
 
-                    with open(os.path.join(data_dir, design_fp, 'random.pkl'), 'rb') as f:
-                        random_dict = pickle.load(f)
-                        
-                        node_ramdom_features = random_dict['node_random']
-                        net_random_features = random_dict['net_random']
-        
-                    num_instances = len(node_type)
-                    assert len(node_size_x) == num_instances
-                    assert len(node_size_y) == num_instances
-                    assert len(eig_vec) == num_instances
+                file_name = data_load_fp + '/' + 'node_features.pkl'
+                f = open(file_name, 'rb')
+                dictionary = pickle.load(f)
+                f.close()        
+                self.design_name = dictionary['design']
+                num_instances = dictionary['num_instances']
+                num_nets = dictionary['num_nets']
+                raw_instance_features = torch.Tensor(dictionary['instance_features'])
+                pos_lst = raw_instance_features[:, :2]
 
-                    edge_index_source_sink = []
-                    edge_index_sink_to_net = []
-                    edge_index_source_to_net = []
-                    
-                    for net_idx in range(len(net2sink)):
-                        sink_idx_lst = net2sink[net_idx]
-                        source_idx = net2source[net_idx]
-                    
-                        for sink_idx in sink_idx_lst:
-                            edge_index_sink_to_net.append([sink_idx, net_idx])
-                            edge_index_source_sink.append([source_idx, sink_idx])
-                    
-                        edge_index_source_to_net.append([source_idx, net_idx])
-                        
+                x_min = dictionary['x_min']
+                x_max = dictionary['x_max']
+                y_min = dictionary['y_min']
+                y_max = dictionary['y_max'] 
+                min_cell_width = dictionary['min_cell_width']
+                max_cell_width = dictionary['max_cell_width']
+                min_cell_height = dictionary['min_cell_height']
+                max_cell_height = dictionary['max_cell_height']
+                
+                X = pos_lst[:, 0].flatten()
+                Y = pos_lst[:, 1].flatten()
+                
+                instance_features = raw_instance_features[:, 2:]
+                net_features = torch.zeros(num_nets, instance_features.size(1))
+
+                y = torch.load(data_load_fp + '/' + 'new_targets.pt')
+                
+                file_name = data_load_fp + '/' + 'bipartite.pkl'
+                f = open(file_name, 'rb')
+                dictionary = pickle.load(f)
+                f.close()
         
-                    edge_index_source_sink = torch.tensor(edge_index_source_sink).T.long()
-                    edge_index_source_to_net = torch.tensor(edge_index_source_to_net).T.long()
-                    edge_index_sink_to_net = torch.tensor(edge_index_sink_to_net).T.long()
-                    out_degrees = compute_degrees(edge_index_source_sink, num_instances)
-                    in_degrees = compute_degrees(torch.flip(edge_index_source_sink, dims=[0]), num_instances)
-                    source2net_inst_degrees = compute_degrees(edge_index_source_to_net, num_instances)
-                    source2net_net_degrees = compute_degrees(torch.flip(edge_index_source_to_net, dims=[0]), len(net2source))
-                    sink2net_net_degrees = compute_degrees(torch.flip(edge_index_sink_to_net, dims=[0]), len(net2source))
-                    
-                    node_features = np.vstack([node_type, in_degrees, out_degrees, source2net_inst_degrees, node_size_x, node_size_y]).T
-    
-                    if load_pe:
-                        node_features = np.concatenate([node_features, eig_vec], axis=1)
-                            
-                    node_features = torch.tensor(node_features).float()
-                    node_features = torch.concat([node_features, node_ramdom_features], dim=1)
-                    net_features = torch.tensor(np.vstack([source2net_net_degrees, sink2net_net_degrees]).T).float()
-                    net_features = torch.concat([net_features, net_random_features], dim=1)
-                    data = Data(
-                        node_features = node_features, 
-                        net_features = net_features, 
-                        edge_index_source_sink = edge_index_source_sink,
+                instance_idx = torch.Tensor(dictionary['instance_idx']).unsqueeze(dim = 1).long()
+                net_idx = torch.Tensor(dictionary['net_idx']) + num_instances
+                net_idx = net_idx.unsqueeze(dim = 1).long()
+                
+                edge_attr = torch.Tensor(dictionary['edge_attr']).float().unsqueeze(dim = 1).float()
+                edge_index = torch.cat((instance_idx, net_idx), dim = 1)
+                edge_dir = dictionary['edge_dir']
+                v_drive_idx = [idx for idx in range(len(edge_dir)) if edge_dir[idx] == 1]
+                v_sink_idx = [idx for idx in range(len(edge_dir)) if edge_dir[idx] == 0] 
+                edge_index_source_to_net = edge_index[v_drive_idx]
+                edge_index_sink_to_net = edge_index[v_sink_idx]
+                
+                edge_index_source_to_net = torch.transpose(edge_index_source_to_net, 0, 1)
+                edge_index_sink_to_net = torch.transpose(edge_index_sink_to_net, 0, 1)
+                
+                x = instance_features
+                
+                example = Data()
+                example.__num_nodes__ = x.size(0)
+                example.x = x
+                example.y = y
+
+                fn = data_load_fp + '/' + 'degree.pkl'
+                f = open(fn, "rb")
+                d = pickle.load(f)
+                f.close()
+
+                example.edge_attr = edge_attr[:2]
+                example.cell_degrees = torch.tensor(d['cell_degrees'])
+                example.net_degrees = torch.tensor(d['net_degrees'])
+                
+                example.x = torch.cat([example.x, example.cell_degrees.unsqueeze(dim = 1)], dim = 1)
+                example.x_net = example.net_degrees.unsqueeze(dim = 1)
+
+                file_name = data_load_fp + '/' + 'metis_part_dict.pkl'
+                f = open(file_name, 'rb')
+                part_dict = pickle.load(f)
+                f.close()
+
+                part_id_lst = []
+
+                for idx in range(len(example.x)):
+                    part_id_lst.append(part_dict[idx])
+
+                part_id = torch.LongTensor(part_id_lst)
+
+                example.num_vn = len(torch.unique(part_id))
+
+                top_part_id = torch.Tensor([0 for idx in range(example.num_vn)]).long()
+
+                example.num_top_vn = len(torch.unique(top_part_id))
+
+                example.part_id = part_id
+                example.top_part_id = top_part_id
+
+                fn = data_load_fp + '/' + 'net_hpwl.pkl'
+                f = open(fn, "rb")
+                d_hpwl = pickle.load(f)
+                f.close()
+                net_hpwl = torch.Tensor(d_hpwl['hpwl']).float()
+
+
+                if load_pe:
+                    file_name = data_load_fp + '/' + 'eigen.10.pkl'
+                    f = open(file_name, 'rb')
+                    dictionary = pickle.load(f)
+                    f.close()
+
+                    evects = torch.Tensor(dictionary['evects'])
+                    example.x = torch.cat([example.x, evects[:example.x.shape[0]]], dim = 1)
+                    example.x_net = torch.cat([example.x_net, evects[example.x.shape[0]:]], dim = 1)
+
+                if load_pd == True:
+                    file_name = data_load_fp + '/' + 'node_neighbor_features.pkl'
+                    f = open(file_name, 'rb')
+                    dictionary = pickle.load(f)
+                    f.close()
+        
+                    pd = torch.Tensor(dictionary['pd'])
+                    neighbor_list = torch.Tensor(dictionary['neighbor'])
+        
+                    assert pd.size(0) == num_instances
+                    assert neighbor_list.size(0) == num_instances
+        
+                    example.x = torch.cat([example.x, pd, neighbor_list], dim = 1)
+
+                data = Data(
+                        node_features = example.x, 
+                        net_features = example.x_net, 
                         edge_index_sink_to_net = edge_index_sink_to_net, 
                         edge_index_source_to_net = edge_index_source_to_net, 
+                        node_congestion = y, 
+                        net_hpwl = net_hpwl,
+                        batch = example.part_id,
+                        num_vn = example.num_vn,
+                        pos_lst = pos_lst,
+                        x_min = x_min, 
+                        x_max = x_max,
+                        y_min = y_min,
+                        y_max = y_max,
+                        min_cell_width = min_cell_width,
+                        max_cell_width = max_cell_width,
+                        min_cell_height = min_cell_height,
+                        max_cell_height = max_cell_height
                     )
+                
+                data_save_fp = os.path.join(data_load_fp, 'pyg_data.pkl')
+                torch.save(data, data_save_fp)
                     
-                    data_save_fp = os.path.join(data_dir, design_fp, 'pyg_data.pkl')
-                    torch.save(data, data_save_fp)
-                except:
-                    print(f"failed reading {design_fp}")
-                    continue
 
             data['design_name'] = design_fp
             self.data_lst.append(data)

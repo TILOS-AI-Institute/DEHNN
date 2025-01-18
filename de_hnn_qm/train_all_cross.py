@@ -19,11 +19,6 @@ import wandb
 from tqdm import tqdm
 from collections import Counter
 
-from utils import *
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
 import sys
 sys.path.insert(1, 'data/')
 from pyg_dataset import NetlistDataset
@@ -51,10 +46,10 @@ test = False # if only test but not train
 restart = False # if restart training
 reload_dataset = True # if reload already processed h_dataset
 
-model_type = "dehnn"
+model_type = "digat"
 num_layer = 3
 num_dim = 32
-vn = False
+vn = True
 trans = False
 aggr = "add"
 device = "cuda"
@@ -78,26 +73,33 @@ if not reload_dataset:
         mask_edges = mask[data.edge_index_sink_to_net[1]] 
         filtered_edge_index_sink_to_net = data.edge_index_sink_to_net[:, mask_edges]
         data.edge_index_sink_to_net = filtered_edge_index_sink_to_net
-        
-        h_data = HeteroData()
-        h_data['node'].node_features = data.node_features
-        h_data['net'].net_features = data.net_features
-        h_data.num_instances = data.node_features.shape[0]
-        h_data['node', 'as_a_sink_of', 'net'].edge_index, h_data['node', 'as_a_sink_of', 'net'].edge_weight = data.edge_index_sink_to_net, 1 
-        h_data['node', 'as_a_source_of', 'net'].edge_index = data.edge_index_source_to_net
-        _, h_data['net', 'sink_to', 'node'].edge_weight = None, 1 
-        h_data['design_name'] = data['design_name']
-        edge_index = torch.concat([data.edge_index_source_to_net, data.edge_index_sink_to_net], dim=1)
-        variant_data_lst = []
 
-        node_congestion = data.node_congestion
-        net_hpwl = data.net_hpwl
+        h_data = HeteroData()
+        h_data['node'].x = data.node_features
+        h_data['net'].x = data.net_features
+        
+        edge_index = torch.concat([data.edge_index_sink_to_net, data.edge_index_source_to_net], dim=1)
+        h_data['node', 'to', 'net'].edge_index, h_data['node', 'to', 'net'].edge_weight = gcn_norm(edge_index, add_self_loops=False)
+        h_data['node', 'to', 'net'].edge_type = torch.concat([torch.zeros(data.edge_index_sink_to_net.shape[1]), torch.ones(data.edge_index_source_to_net.shape[1])]).bool()
+        h_data['net', 'to', 'node'].edge_index, h_data['net', 'to', 'node'].edge_weight = gcn_norm(edge_index.flip(0), add_self_loops=False)
+        
+        h_data['design_name'] = data['design_name']
+        h_data.num_instances = data.node_features.shape[0]
+        variant_data_lst = []
+        
+        # avg.demand and std.demand
+        node_congestion = data.node_congestion[:, 0:1]
+        net_hpwl = data.node_congestion[:, 3:4]
+
+        node_congestion = node_congestion.flatten()
+        #node_congestion = (node_congestion - torch.mean(node_congestion)) / torch.std(node_congestion)
+        net_hpwl = net_hpwl.flatten()
+        #net_hpwl = (net_hpwl - torch.mean(net_hpwl)) / torch.std(net_hpwl)
+        
         batch = data.batch
         num_vn = len(np.unique(batch))
-
-        vn_node = torch.concat([global_mean_pool(h_data['node'].node_features, batch), 
-                global_max_pool(h_data['node'].node_features, batch)], dim=1)
-
+        vn_node = torch.concat([global_mean_pool(h_data['node'].x, batch), 
+                global_max_pool(h_data['node'].x, batch)], dim=1)
         variant_data_lst.append((node_congestion, net_hpwl, batch, num_vn, vn_node)) 
         h_data['variant_data_lst'] = variant_data_lst
         h_dataset.append(h_data)
@@ -116,16 +118,14 @@ h_data = h_dataset[0]
 if restart:
     model = torch.load(f"{model_type}_{num_layer}_{num_dim}_{vn}_{trans}_model.pt")
 else:
-    model = GNN_node(num_layer, num_dim, 4, 1, node_dim = h_data['node'].node_features.shape[1], net_dim = h_data['net'].net_features.shape[1], gnn_type=model_type, vn=vn, trans=trans, aggr=aggr, JK="Normal").to(device)
+    model = GNN_node(num_layer, num_dim, 1, 1, node_dim = h_data['node'].x.shape[1], net_dim = h_data['net'].x.shape[1], gnn_type=model_type, vn=vn, trans=trans, aggr=aggr, JK="Normal").to(device)
 
 criterion_node = nn.MSELoss()
 criterion_net = nn.MSELoss()
-optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+optimizer = optim.AdamW(model.parameters(), lr=learning_rate,  weight_decay=0.01)
 load_data_indices = [idx for idx in range(len(h_dataset))]
-all_train_indices, all_valid_indices, all_test_indices = load_data_indices[:8], load_data_indices[8:], load_data_indices[8:]
+all_train_indices, all_valid_indices, all_test_indices = load_data_indices[:9], load_data_indices[9:], load_data_indices[9:]
 best_total_val = None
-
-scaler = torch.cuda.amp.GradScaler()
 
 for epoch in range(1000):
     np.random.shuffle(all_train_indices)
@@ -137,24 +137,21 @@ for epoch in range(1000):
     all_train_idx = 0
     for data_idx in tqdm(all_train_indices):
         data = h_dataset[data_idx]
-        
         for inner_data_idx in range(len(data.variant_data_lst)):
             target_node, target_net, batch, num_vn, vn_node = data.variant_data_lst[inner_data_idx]
             optimizer.zero_grad()
-            
             data.batch = batch
             data.num_vn = num_vn
             data.vn = vn_node
             node_representation, net_representation = model(data, device)
+            node_representation = torch.squeeze(node_representation)
+            net_representation = torch.squeeze(net_representation)
 
             loss_node = criterion_node(node_representation, target_node.to(device))
-            loss_net = criterion_net(net_representation.flatten(), target_net.to(device))
-            loss = 10*loss_node + 0.001*loss_net
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            #loss.backward()
-            #optimizer.step()   
+            loss_net = criterion_net(net_representation, target_net.to(device))
+            loss = loss_node + loss_net
+            loss.backward()
+            optimizer.step()   
 
             loss_node_all += loss_node.item()
             loss_net_all += loss_net.item()
@@ -164,20 +161,22 @@ for epoch in range(1000):
     all_valid_idx = 0
     for data_idx in tqdm(all_valid_indices):
         data = h_dataset[data_idx]
-        for inner_data_idx in tqdm(range(len(data.variant_data_lst))):
+        for inner_data_idx in range(len(data.variant_data_lst)):
             target_node, target_net, batch, num_vn, vn_node = data.variant_data_lst[inner_data_idx]
             data.batch = batch
             data.num_vn = num_vn
             data.vn = vn_node
             node_representation, net_representation = model(data, device)
+            node_representation = torch.squeeze(node_representation)
+            net_representation = torch.squeeze(net_representation)
             
             val_loss_node = criterion_node(node_representation, target_node.to(device))
-            val_loss_net = criterion_net(net_representation.flatten(), target_net.to(device))
+            val_loss_net = criterion_net(net_representation, target_net.to(device))
             val_loss_node_all +=  val_loss_node.item()
             val_loss_net_all += val_loss_net.item()
             all_valid_idx += 1
     print(val_loss_node_all/all_valid_idx, val_loss_net_all/all_valid_idx)
 
-    if (best_total_val is None) or ((val_loss_node_all/all_valid_idx) < best_total_val):
-        best_total_val = val_loss_node_all/all_valid_idx
+    if (best_total_val is None) or ((loss_node_all/all_train_idx) < best_total_val):
+        best_total_val = loss_node_all/all_train_idx
         torch.save(model, f"{model_type}_{num_layer}_{num_dim}_{vn}_{trans}_model.pt")
