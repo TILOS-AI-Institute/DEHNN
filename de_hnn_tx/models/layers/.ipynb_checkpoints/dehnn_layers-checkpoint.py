@@ -39,10 +39,10 @@ class HyperConvLayer(MessagePassing):
                         Linear(net_out_channels * 2, net_out_channels))
 
         self.conv = SimpleConv()
-        self.forward_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False)
-        self.back_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False)
+        self.forward_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False, dropout=0.2)
+        self.back_conv = GATv2Conv(out_channels, out_channels, edge_dim=1, heads=2, concat=False, add_self_loops=False, dropout=0.2)
         
-    def forward(self, x, x_net, edge_index_source_to_net, edge_index_sink_to_net, edge_weight_sink_to_net, edge_attr_sink_to_net):
+    def forward(self, x, x_net, edge_index_source_to_net, edge_index_sink_to_net, edge_attr_sink_to_net):
         h_net_source = self.conv((x, x_net), edge_index_source_to_net) + x_net
         h_net_sink = self.psi(self.forward_conv((x, x_net), edge_index_sink_to_net, edge_attr = edge_attr_sink_to_net)) + x_net
         h_net = self.mlp(torch.concat([h_net_source, h_net_sink], dim=1)) + x_net

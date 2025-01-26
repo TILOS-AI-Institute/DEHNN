@@ -33,10 +33,34 @@ from dehnn_layers import HyperConvLayer
 from torch_geometric.utils.dropout import dropout_edge
 from torch_geometric.nn.conv import GCNConv, GATv2Conv
 
-from utils import *
-from torch.utils.checkpoint import checkpoint
-
-enable_checkpoint = False
+class UtilMapConverter:
+    def __init__(self, pos_lst, num_sites_x, num_sites_y, device):
+        """Initialize converter with position-dependent calculations"""
+        self.num_sites_x = num_sites_x
+        self.num_sites_y = num_sites_y
+        self.device = device
+        
+        # Pre-compute indices for both conversion directions
+        self.indices = (pos_lst[:, 0].long() * num_sites_y + pos_lst[:, 1].long()).to(device)
+        
+    def to_util_map(self, node_features, max_sum):
+        """Convert node features to utilization map"""
+        num_channels = node_features.shape[1]
+        indices = self.indices.unsqueeze(1).expand(node_features.shape[0], num_channels)
+        
+        if max_sum == 'amax':
+            min_value = torch.min(node_features).item()
+            util_map = torch.full((self.num_sites_x * self.num_sites_y, num_channels), min_value, device=self.device)
+        elif max_sum == 'sum':
+            util_map = torch.zeros((self.num_sites_x * self.num_sites_y, num_channels), device=self.device)
+        
+        util_map.scatter_reduce_(0, indices, node_features, reduce=max_sum, include_self=True)
+        return util_map.view(self.num_sites_x, self.num_sites_y, num_channels)
+    
+    def to_node_features(self, util_map_flat):
+        """Map utilization map back to node features"""
+        #util_map_flat = util_map.view(-1, util_map.shape[2])
+        return util_map_flat[self.indices]
 
 class GNN_node(torch.nn.Module):
     """
@@ -95,9 +119,11 @@ class GNN_node(torch.nn.Module):
                 
         self.convs = torch.nn.ModuleList()
         self.norms = torch.nn.ModuleList()
-        self.cv_virtualnode_list = torch.nn.ModuleList()
 
-        if self.vn:            
+        if self.vn:
+            if self.cv:
+                self.cv_virtualnode_list = torch.nn.ModuleList()
+            
             self.virtualnode_encoder = nn.Sequential(
                     nn.Linear(node_dim*2, emb_dim*2),
                     nn.LeakyReLU(),
@@ -129,8 +155,6 @@ class GNN_node(torch.nn.Module):
                     self.cv_virtualnode_list.append(
                         UNet(n_channels=emb_dim, n_classes=emb_dim, input_type=2)
                     )
-                else:
-                    self.cv_virtualnode_list.append(None)
 
         for layer in range(num_layer):
             if gnn_type == 'gat':
@@ -152,9 +176,6 @@ class GNN_node(torch.nn.Module):
         self.fc1_net = torch.nn.Linear(emb_dim, 64)
         self.fc2_net = torch.nn.Linear(64, self.out_net_dim)
 
-        self.fc1_grid = torch.nn.Linear(emb_dim, 64)
-        self.fc2_grid = torch.nn.Linear(64, self.out_net_dim)
-
 
     def forward(self, data, device):
         h_inst = data['node'].x.to(device)
@@ -168,14 +189,13 @@ class GNN_node(torch.nn.Module):
         num_instances = data.num_instances
         num_sites_x = data.num_sites_x
         num_sites_y = data.num_sites_y
-        num_pixels = num_sites_x*num_sites_y
         converter = UtilMapConverter(pos_lst, num_sites_x, num_sites_y, device)
 
         if self.vn:
-            virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, max_sum='sum').view(num_pixels, num_features), 
-                                     converter.to_util_map(h_inst, max_sum='amax').view(num_pixels, num_features)], dim=1) 
+            virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, 'sum').view(num_sites_x*num_sites_y, num_features), 
+                                     converter.to_util_map(h_inst, 'amax').view(num_sites_x*num_sites_y, num_features)], dim=1) #shape (num_sites_x*num_sites_y, num_features)
             
-            virtualnode_embedding = self.virtualnode_encoder(virtualnode_embedding_temp) #shape (num_pixels, num_features)
+            virtualnode_embedding = self.virtualnode_encoder(virtualnode_embedding_temp) #shape (num_sites_x*num_sites_y, num_features)
         
         h_inst = self.node_encoder(h_inst)
         h_net = self.net_encoder(h_net)
@@ -185,26 +205,26 @@ class GNN_node(torch.nn.Module):
                 h_inst = self.back_virtualnode_list[layer](torch.concat([h_inst, converter.to_node_features(virtualnode_embedding)], dim=1))
 
             h_inst, h_net = self.convs[layer](h_inst, h_net, edge_index_source_to_net, edge_index_sink_to_net, edge_attr_sink_to_net)
-                
             h_inst = self.norms[layer](h_inst)
             h_net = self.norms[layer](h_net)
             h_inst = torch.nn.functional.leaky_relu(h_inst)
             h_net = torch.nn.functional.leaky_relu(h_net)
             
             if self.vn:
-                virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, max_sum='sum').view(num_pixels, self.emb_dim), 
-                                     converter.to_util_map(h_inst, max_sum='amax').view(num_pixels, self.emb_dim)], dim=1)
-                if self.cv and ((layer == 0) or (layer == self.num_layer-1)):
+                virtualnode_embedding_temp = torch.concat([converter.to_util_map(h_inst, 'sum').view(num_sites_x*num_sites_y, self.emb_dim), 
+                                     converter.to_util_map(h_inst, 'amax').view(num_sites_x*num_sites_y, self.emb_dim)], dim=1)
+                if self.cv and ((layer == 0) or (layer == num_layer-1)):
                     virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
-                    virtualnode_embedding = self.cv_virtualnode_list[layer](virtualnode_embedding.view(1, self.emb_dim, num_sites_y, num_sites_x)).view(num_pixels, self.emb_dim) + virtualnode_embedding
+                    virtualnode_embedding = self.cv_virtualnode_list[layer](virtualnode_embedding.view(1, self.emb_dim, num_sites_y, num_sites_x)).view(num_sites_x*num_sites_y, self.emb_dim) + virtualnode_embedding
                 else:
                     virtualnode_embedding = self.mlp_virtualnode_list[layer](virtualnode_embedding_temp) + virtualnode_embedding
 
         if not self.vn:
-            virtualnode_embedding = converter.to_util_map(h_inst, max_sum='amax').view(num_pixels, self.emb_dim)
+            virtualnode_embedding = converter.to_util_map(h_inst, 'amax').view(num_sites_x*num_sites_y, self.emb_dim)
             
-        h_inst = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(h_inst)))    
+        h_inst = self.fc2_node(torch.nn.functional.leaky_relu(self.fc1_node(virtualnode_embedding)))    
         h_net = self.fc2_net(torch.nn.functional.leaky_relu(self.fc1_net(h_net)))
-        virtualnode_embedding = self.fc2_grid(torch.nn.functional.leaky_relu(self.fc1_grid(virtualnode_embedding)))
-        
+
         return h_inst, h_net, virtualnode_embedding
+        
+        
